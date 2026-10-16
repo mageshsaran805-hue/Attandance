@@ -98,7 +98,8 @@ when backend behaviour changed. Report only results that were actually observed.
   single reverse proxy so rate limits key on real client IPs, keep 0 when the
   API is directly reachable. `npm run create-admin` bootstraps/promotes a real
   admin account (env: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`).
-  Production steps: `docs/deployment.md`; CI: `.github/workflows/ci.yml`.
+  Production steps: `docs/deployment.md` (free-tier variant:
+  `docs/deployment-free.md`, Netlify + Render); CI: `.github/workflows/ci.yml`.
 - API responses set security headers (`nosniff`, `DENY`, `no-referrer`,
   CORP same-origin, `Cache-Control: no-store`) in `src/app.ts`.
 - Access control model (design): ADMIN manages departments/accounts; HOD sees

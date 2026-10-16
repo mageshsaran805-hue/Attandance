@@ -1,0 +1,28 @@
+# Netlify configuration for the built SPA.
+#
+# Site settings in the Netlify UI: base directory = `frontend`
+# (Netlify then reads this file; no other build settings are needed).
+#
+# Full walkthrough: docs/deployment-free.md
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Same-origin API proxy. The browser only ever talks to the Netlify domain,
+# so the Secure/SameSite=Lax session cookie and the CSRF double-submit cookie
+# keep working exactly as audited — no application code changes.
+#
+# Replace the host with your Render service URL (deployment-free.md step 4).
+# Rules are applied top-to-bottom.
+[[redirects]]
+  from = "/api/*"
+  to = "https://REPLACE-WITH-YOUR-RENDER-SERVICE.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# Client-side routing: unknown paths fall back to the SPA shell.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

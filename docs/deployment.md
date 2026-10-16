@@ -5,6 +5,9 @@ from the same origin behind HTTPS, and a PostgreSQL database on Supabase.
 For local development see [`setup.md`](setup.md); the reasoning behind the
 security-relevant choices is in [`security.md`](security.md).
 
+> Deploying without a budget? [`deployment-free.md`](deployment-free.md)
+> covers the same architecture on free tiers (Netlify + Render + Supabase).
+
 ## 1. What you need
 
 | Item | Notes |

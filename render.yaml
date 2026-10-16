@@ -1,0 +1,42 @@
+# Render Blueprint — free hosting for the College Attendance API.
+#
+# Deploy: Render Dashboard → New → Blueprint → select this repository.
+# Render reads this file, creates the web service below, and prompts for the
+# secret values marked `sync: false`. Full walkthrough: docs/deployment-free.md
+#
+# Notes:
+# - `name` becomes the service's https://<name>.onrender.com address and must
+#   be unique across Render — change it here if Render reports a conflict.
+# - The Supabase CA certificate cannot be defined in a Blueprint; it is added
+#   once in the dashboard (Environment → Secret Files) so it mounts at
+#   /etc/secrets/supabase-ca.crt.
+
+services:
+  - type: web
+    name: college-attendance-api
+    runtime: node
+    plan: free # 0.1 CPU / 512 MB; sleeps after 15 idle minutes
+    region: singapore # closest free Render region to India
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start # node dist/index.js
+    healthCheckPath: /api/health # always 200 while the process can answer
+    autoDeployTrigger: checksPass # deploy only when GitHub CI is green
+    envVars:
+      - key: NODE_VERSION
+        value: "22" # the backend requires Node.js >= 22
+      - key: NODE_ENV
+        value: production # enables Secure session cookies
+      - key: PORT
+        value: "10000" # Render's expected HTTP port
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: TRUST_PROXY_HOPS
+        value: "2" # Netlify proxy → Render load balancer → Node
+      # Secrets — Render prompts for these during Blueprint creation:
+      - key: JWT_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: DATABASE_URL
+        sync: false
