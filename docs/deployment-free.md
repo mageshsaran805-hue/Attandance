@@ -140,11 +140,11 @@ web service running alongside it.
 3. Sign in at the Netlify URL; in devtools confirm `ca_session` is
    `HttpOnly`, `Secure` and `SameSite=Lax`, and that `ca_session_csrf`
    exists (readable by the SPA on purpose).
-4. Hop-count check: after one failed sign-in attempt, open the admin audit
-   view and find the newest `auth.login_failed` row — its IP column must
-   show your real public IP (compare with <https://ifconfig.me>). If it
-   shows a proxy address instead, adjust `TRUST_PROXY_HOPS` (try 1 or 3) in
-   the Render dashboard and redeploy.
+4. Audit check: after a sign-in attempt, open the admin audit view and find
+   the newest `auth.login` row — it appears immediately, proving audit
+   logging works end-to-end. On this free setup the row's `ip` shows a
+   proxy/CDN address rather than your personal IP; that is expected (see
+   "Accepted limitations") and has no functional impact.
 5. Create a department in the UI: it should save and appear in the audit
    log, proving cookies, CSRF and database writes through the proxy.
 
@@ -173,21 +173,20 @@ web service running alongside it.
 
 ## Accepted limitations (free setup)
 
-- **Client IPs and the raw API URL.** [`deployment.md`](deployment.md) §8
-  says to keep `TRUST_PROXY_HOPS=0` unless a trusted proxy is the only path
-  to the API. This setup deliberately deviates: two proxies sit in front of
-  the API (Netlify's edge and Render's load balancer), so the blueprint
-  uses `TRUST_PROXY_HOPS=2` to give the login rate limiter and the audit
-  log real client IPs. Two consequences:
-  - Traffic through the Netlify site behaves correctly (Netlify sets
-    `X-Forwarded-For` to the real visitor IP), and step 6 verifies it.
-  - The API is *also* reachable directly at its `onrender.com` address, so
-    a caller skipping Netlify can influence their apparent IP for per-IP
-    rate-limit keying (login throttling) and the audit log's informational
-    `ip` field. Sessions are signed JWTs and the per-student limiter keys
-    by student account, so nothing else is affected. Prefer strictness over
-    correct client IPs? Set `TRUST_PROXY_HOPS=0` and accept that rate
-    limits then key on shared proxy addresses instead.
+- **Client IPs.** [`deployment.md`](deployment.md) §8 says to keep
+  `TRUST_PROXY_HOPS=0` unless a trusted proxy is the only path to the API.
+  This setup deliberately deviates and ships `TRUST_PROXY_HOPS=2`, but an
+  additional CDN hop in front of `onrender.com` (the observed addresses
+  fall in Cloudflare's ranges) means the app still sees a proxy/CDN
+  address, not the visitor's own IP. Measured effect: audit-log `ip`
+  values are CDN addresses (informational only), and the login rate
+  limiter buckets failures by CDN address instead of per visitor —
+  throttling still applies, just not one bucket per visitor. A spoofed
+  `X-Forwarded-For` probe did not change the recorded address, so callers
+  cannot choose their bucket. Nothing else is affected: sessions are
+  signed JWTs and the per-student limiter keys by student account. If
+  per-visitor IPs become a requirement, use the VM setup in
+  [`deployment.md`](deployment.md), which removes the extra hops.
 - **Sleeping API:** mitigated by the uptime monitor; otherwise the first
   request after idle takes up to a minute, or fails once behind the proxy
   (retrying succeeds).
@@ -205,6 +204,7 @@ web service running alongside it.
 | SPA loads, all API calls fail | `netlify.toml` placeholder not replaced | Edit, push, wait for the Netlify redeploy |
 | First request of the day times out | Cold start | Retry once; confirm the uptime monitor is running |
 | `"database":{"status":"down"}` | Secret file missing/misnamed, or `sslrootcert` path wrong in `DATABASE_URL` | Fix in Render → Environment, redeploy (a secret-file change redeploys by itself) |
+| Startup error: `DATABASE_URL: must be a postgres:// or postgresql:// connection string` | The saved value is not the connection string — often a stray quote or a partial copy-paste | Render → Environment → `DATABASE_URL` → re-paste the full `postgresql://...` value (no surrounding quotes), save |
 | Render asks for a different service name | `onrender.com` names are global | Change `name:` in `render.yaml` |
 | Build fails: `Cannot find type definition file for 'node'` (or `tsc: not found`) | `NODE_ENV=production` makes npm skip devDependencies, so TypeScript/`@types/*` are missing | Keep `--include=dev` in the build command (`npm ci --include=dev && npm run build`), as `render.yaml` does |
 | Deploy stuck waiting on checks | CI failed or did not run for that commit | Fix CI, or set `autoDeployTrigger: commit` |
