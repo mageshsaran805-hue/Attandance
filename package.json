@@ -1,0 +1,8 @@
+{
+  "name": "college-attendance",
+  "private": true,
+  "description": "Root convenience scripts only. backend/ and frontend/ are independent npm projects.",
+  "scripts": {
+    "dev:all": "npm --prefix backend run dev & npm --prefix frontend run dev & wait"
+  }
+}

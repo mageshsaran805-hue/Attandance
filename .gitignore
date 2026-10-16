@@ -1,0 +1,33 @@
+# --- Dependencies ---
+node_modules/
+
+# --- Build output ---
+dist/
+build/
+*.tsbuildinfo
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Environment files (never commit secrets) ---
+# Ignore all .env files including environment-specific ones
+# (e.g. .env.local, .env.development), but keep the example placeholders.
+.env
+.env.*
+!.env.example
+
+# --- Test / coverage output ---
+coverage/
+
+# --- Editor and OS cruft ---
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# --- Trust material ---
+# Downloaded CA certificates (e.g. the Supabase database CA) are
+# environment-specific; download them fresh from the provider dashboard
+# instead of committing copies. See backend/.env.example.
+backend/certs/
