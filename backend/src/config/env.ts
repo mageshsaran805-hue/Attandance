@@ -38,6 +38,12 @@ const envSchema = z.object({
 
   PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(65535).default(4000)),
 
+  // Number of trusted reverse-proxy hops in front of the API. Kept explicit
+  // (default 0 = no proxy) so X-Forwarded-For cannot be spoofed when the API
+  // is reachable directly; set to 1 behind a single reverse proxy so rate
+  // limiting keys on the real client IP (see docs/deployment.md).
+  TRUST_PROXY_HOPS: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).max(10).default(0)),
+
   APP_TIMEZONE: z.preprocess(
     emptyToUndefined,
     z

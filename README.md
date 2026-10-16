@@ -1,5 +1,7 @@
 # College Attendance Management System
 
+[![CI](https://github.com/mageshsaran805-hue/Attandance/actions/workflows/ci.yml/badge.svg)](https://github.com/mageshsaran805-hue/Attandance/actions/workflows/ci.yml)
+
 College Daily Morning Attendance Management System — one morning attendance
 session per class per calendar day (Asia/Kolkata), with OTP-based
 student self-marking, faculty corrections and department-scoped reporting.
@@ -13,7 +15,10 @@ student self-marking, faculty corrections and department-scoped reporting.
 > admin report, per-student percentages and history — plus an admin audit-log
 > view, rate limiting on failed marking attempts and a dependency-free set of
 > security headers. Use **fake development data only** — never real student
-> records.
+> records. Post-plan additions: a GitHub Actions CI pipeline (both builds plus
+> the full backend test suite against a disposable Postgres), a production
+> [deployment guide](docs/deployment.md), reverse-proxy support
+> (`TRUST_PROXY_HOPS`) and an admin bootstrap command (`npm run create-admin`).
 
 ## Stack
 
@@ -29,20 +34,21 @@ student self-marking, faculty corrections and department-scoped reporting.
 ## Repository layout
 
 ```
+.github/workflows/       CI: backend build + tests, frontend lint + build
 frontend/                React + Vite single-page app
   src/components/        shared UI (app shell with role navigation, guards, ui/ primitives)
   src/lib/               API client, auth context, fetch/action hooks, formatting, OTP display helpers
   src/pages/             login, role dashboards and admin/, hod/, faculty/ screens (rosters and sessions)
 backend/                 Express + TypeScript API
   src/config/            validated environment configuration
-  src/db/                connection pool, migration runner, transactions, dev seed
+  src/db/                connection pool, migration runner, transactions, dev seed, admin bootstrap
   src/lib/               password hashing, tokens, CSRF, cookies, errors, OTP, timezone dates, shared schemas
   src/middleware/        auth, CSRF, validation, error handling
   src/routes/            health, auth, admin, hod, faculty, attendance, reports
   src/services/          users, departments, classes, enrollments, class-faculty, attendance, reports, audit
   src/test/              test bootstrap and helpers
 database/migrations/     numbered SQL migrations (0001_core_schema.sql)
-docs/                    setup.md, database-design.md, security.md
+docs/                    setup.md, deployment.md, database-design.md, security.md
 AGENTS.md                instructions for future coding-agent runs
 ```
 
@@ -88,6 +94,7 @@ list.
 | backend  | `npm run typecheck` | Type-check without emitting                   |
 | backend  | `npm run migrate`   | Apply pending SQL migrations (forward-only)   |
 | backend  | `npm run seed:dev`  | Insert fake development data (idempotent)     |
+| backend  | `npm run create-admin` | Bootstrap/promote a real admin account (production) |
 | backend  | `npm test`          | Vitest; database-backed tests need `TEST_DATABASE_URL` |
 | frontend | `npm run dev`       | Vite dev server with `/api` proxy             |
 | frontend | `npm run build`     | Type-check (`tsc -b`) + production build      |
@@ -230,6 +237,7 @@ left for a future phase) lives in [`docs/security.md`](docs/security.md).
 ## Documentation
 
 - [`docs/setup.md`](docs/setup.md) — environment setup, migrations, seeding, tests
+- [`docs/deployment.md`](docs/deployment.md) — production deployment guide
 - [`docs/database-design.md`](docs/database-design.md) — data model and decisions
 - [`docs/security.md`](docs/security.md) — Phase 5 security review
 - [`AGENTS.md`](AGENTS.md) — rules and context for coding agents

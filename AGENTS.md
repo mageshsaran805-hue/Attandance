@@ -30,6 +30,7 @@ admin-managed accounts.
 | backend  | `npm run typecheck` | Type-check only                  |
 | backend  | `npm run migrate`   | Apply pending SQL migrations     |
 | backend  | `npm run seed:dev`  | Insert fake development data     |
+| backend  | `npm run create-admin` | Bootstrap/promote a real admin account (production; reads `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`) |
 | backend  | `npm test`          | Vitest (needs `TEST_DATABASE_URL` for DB-backed tests) |
 | frontend | `npm run dev`       | Vite dev server (port 5173)      |
 | frontend | `npm run lint`      | oxlint                           |
@@ -93,6 +94,11 @@ when backend behaviour changed. Report only results that were actually observed.
 - Rate limits (in-memory, per process): login 10 failures / 15 min / IP;
   student self-marking 30 failures / 15 min / student. Successful requests
   are never counted.
+- `TRUST_PROXY_HOPS` (default 0) sets Express `trust proxy`; use 1 behind a
+  single reverse proxy so rate limits key on real client IPs, keep 0 when the
+  API is directly reachable. `npm run create-admin` bootstraps/promotes a real
+  admin account (env: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`).
+  Production steps: `docs/deployment.md`; CI: `.github/workflows/ci.yml`.
 - API responses set security headers (`nosniff`, `DENY`, `no-referrer`,
   CORP same-origin, `Cache-Control: no-store`) in `src/app.ts`.
 - Access control model (design): ADMIN manages departments/accounts; HOD sees
@@ -118,3 +124,8 @@ when backend behaviour changed. Report only results that were actually observed.
   view with filters and paging, per-student rate limiting on failed
   self-marking attempts, dependency-free security headers, and the security
   review in `docs/security.md`.
+- **Post-plan (done):** housekeeping (removed an unused component), GitHub
+  Actions CI (`.github/workflows/ci.yml`: backend build + full tests against
+  a disposable Postgres, frontend lint + build), production
+  `docs/deployment.md`, `TRUST_PROXY_HOPS` reverse-proxy support, and the
+  `create-admin` bootstrap command.

@@ -1,4 +1,5 @@
 import express, { type Express } from 'express';
+import { env } from './config/env.js';
 import { ensureCsrfCookie, requireCsrf } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { adminRouter } from './routes/admin.js';
@@ -18,6 +19,14 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+
+  // Behind a reverse proxy the real client IPs arrive in X-Forwarded-For;
+  // the hop count is explicit (default 0 = direct connections only) so the
+  // header cannot be spoofed when the API is exposed directly. Rate limiting
+  // keys on req.ip, so this must match the deployment topology.
+  if (env.TRUST_PROXY_HOPS > 0) {
+    app.set('trust proxy', env.TRUST_PROXY_HOPS);
+  }
 
   // Dependency-free security headers; the API only ever serves JSON.
   app.use((_req, res, next) => {
