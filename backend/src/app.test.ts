@@ -85,6 +85,29 @@ describe('app behaviour without a database', () => {
     expect(Array.isArray(res.body.issues)).toBe(true);
   });
 
+  it('malformed JSON bodies return 400, not 500', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{"email":');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Malformed JSON body.' });
+  });
+
+  it('oversized JSON bodies return 413, not 500', async () => {
+    const preflight = await request(app).get('/api/health');
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Cookie', cookieHeaderFrom(preflight))
+      .set('X-CSRF-Token', cookieValue(preflight, CSRF_COOKIE) ?? '')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ email: 'someone@example.test', password: 'x'.repeat(150_000) }));
+
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({ error: 'Request body too large.' });
+  });
+
   it.skipIf(hasTestDatabase)('POST /api/auth/login with valid input but no database returns 503', async () => {
     const preflight = await request(app).get('/api/health');
     const res = await request(app)
