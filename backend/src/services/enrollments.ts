@@ -25,6 +25,8 @@ export interface RosterEntry {
     fullName: string;
     email: string;
     isActive: boolean;
+    registerNumber: string | null;
+    phone: string | null;
   };
 }
 
@@ -44,6 +46,8 @@ interface DbRosterRow {
   full_name: string;
   email: string;
   is_active: boolean;
+  register_number: string | null;
+  phone: string | null;
 }
 
 const ENROLLMENT_COLUMNS = 'id, class_id, student_user_id, enrolled_at, unenrolled_at';
@@ -108,7 +112,8 @@ export async function listRoster(
 ): Promise<{ students: RosterEntry[]; formerStudents: RosterEntry[] }> {
   const { rows } = await getPool().query<DbRosterRow>(
     `SELECT e.id AS enrollment_id, e.enrolled_at, e.unenrolled_at,
-            u.id AS student_id, u.full_name, u.email, u.is_active
+            u.id AS student_id, u.full_name, u.email, u.is_active,
+            u.register_number, u.phone
        FROM enrollments e
        JOIN users u ON u.id = e.student_user_id
       WHERE e.class_id = $1
@@ -128,6 +133,8 @@ export async function listRoster(
         fullName: row.full_name,
         email: row.email,
         isActive: row.is_active,
+        registerNumber: row.register_number,
+        phone: row.phone,
       },
     };
     (row.unenrolled_at === null ? students : formerStudents).push(entry);

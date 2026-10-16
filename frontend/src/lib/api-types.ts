@@ -33,6 +33,8 @@ export interface AdminUser {
   fullName: string
   role: UserRole
   isActive: boolean
+  registerNumber: string | null
+  phone: string | null
   createdAt: string
 }
 
@@ -99,6 +101,8 @@ export interface RosterEntry {
     fullName: string
     email: string
     isActive: boolean
+    registerNumber: string | null
+    phone: string | null
   }
 }
 
@@ -113,6 +117,7 @@ export interface AdminOverview {
     departments: number
     classes: number
     accounts: { admins: number; hods: number; faculty: number; students: number }
+    pendingRegistrations: number
   }
 }
 
@@ -347,4 +352,66 @@ export interface AuditListResponse {
 
 export interface AuditActionsResponse {
   actions: string[]
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: student self-registration and the admin review queue
+// ---------------------------------------------------------------------------
+
+export type RegistrationStatus = 'pending' | 'approved' | 'rejected'
+
+export interface RegistrationClassChoice {
+  id: string
+  name: string
+  academicYear: string
+}
+
+export interface RegistrationDepartmentChoice {
+  id: string
+  name: string
+  code: string
+  classes: RegistrationClassChoice[]
+}
+
+export interface RegistrationChoicesResponse {
+  departments: RegistrationDepartmentChoice[]
+}
+
+export interface SubmittedRegistration {
+  id: string
+  status: RegistrationStatus
+  submittedAt: string
+}
+
+export interface AdminRegistrationEntry {
+  id: string
+  fullName: string
+  email: string
+  registerNumber: string
+  phone: string | null
+  status: RegistrationStatus
+  submittedAt: string
+  reviewedAt: string | null
+  reviewedBy: { fullName: string; email: string } | null
+  createdUser: { id: string; email: string } | null
+  class: {
+    id: string
+    name: string
+    academicYear: string
+    department: DepartmentSummary
+  }
+}
+
+export interface AdminRegistrationsResponse {
+  items: AdminRegistrationEntry[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface RegistrationReviewResponse {
+  results: Array<{ id: string; ok: boolean; error?: string }>
+  approved?: number
+  rejected?: number
+  failed: number
 }

@@ -29,3 +29,17 @@ export const academicYearSchema = z
   .string()
   .trim()
   .regex(/^\d{4}-\d{2}$/, 'must look like 2026-27');
+
+export const registerNumberSchema = z
+  .string()
+  .trim()
+  .min(2, 'must be at least 2 characters')
+  .max(40, 'must be at most 40 characters')
+  .regex(/^[A-Za-z0-9/._-]+$/, 'must contain only letters, digits or / . _ -');
+
+export const phoneSchema = z
+  .string()
+  .trim()
+  .min(7, 'must be at least 7 characters')
+  .max(20, 'must be at most 20 characters')
+  .regex(/^[0-9+()\- ]+$/, 'must contain only digits, spaces or + ( ) -');

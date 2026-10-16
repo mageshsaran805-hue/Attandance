@@ -27,9 +27,17 @@ import {
   setDepartmentHod,
   updateDepartment,
 } from '../services/departments.js';
-import { countActiveEnrollmentsForStudent } from '../services/enrollments.js';
+import { countActiveEnrollmentsForStudent, createEnrollment } from '../services/enrollments.js';
+import {
+  approveRegistration,
+  countPendingRegistrations,
+  getRegistrationForUpdate,
+  listRegistrations,
+  rejectRegistration,
+} from '../services/registrations.js';
 import {
   createUser,
+  findUserByEmail,
   findUserById,
   getActiveAccountCounts,
   listUsers,
@@ -145,12 +153,13 @@ const CLASS_IDENTITY_UNIQUE_MESSAGES: Record<string, string> = {
 
 /** GET /api/admin/overview — headline counts for the admin dashboard. */
 adminRouter.get('/admin/overview', async (_req, res) => {
-  const [departments, classes, accounts] = await Promise.all([
+  const [departments, classes, accounts, pendingRegistrations] = await Promise.all([
     countDepartments(),
     countClasses(),
     getActiveAccountCounts(),
+    countPendingRegistrations(),
   ]);
-  res.json({ counts: { departments, classes, accounts } });
+  res.json({ counts: { departments, classes, accounts, pendingRegistrations } });
 });
 
 /** GET /api/admin/departments — departments with their HOD and usage counts. */
@@ -636,6 +645,176 @@ adminRouter.patch(
       throw new Error('admin: class details missing right after update');
     }
     res.json({ class: details });
+  },
+);
+
+// ----------------------------------------------------------------------------
+// Student self-registration review (Phase 6, administrator-only)
+// ----------------------------------------------------------------------------
+
+const registrationListQuerySchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected']).default('pending'),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+const registrationReviewSchema = z.object({
+  ids: z
+    .array(z.uuid('must be a valid id'))
+    .min(1, 'select at least one request')
+    .max(100, 'at most 100 requests at a time'),
+});
+
+/** GET /api/admin/registrations — the review queue (pending oldest-first). */
+adminRouter.get('/admin/registrations', async (req, res) => {
+  const query = parseQuery(req.query, registrationListQuerySchema);
+  res.json(await listRegistrations(query));
+});
+
+/**
+ * POST /api/admin/registrations/approve — approve one or many requests.
+ * Each approval creates an active student account with the submitted
+ * password and enrolls it in the requested class, in its own transaction:
+ * a failure on one request does not undo the others, and its reason is
+ * reported per id.
+ */
+adminRouter.post(
+  '/admin/registrations/approve',
+  validateBody(registrationReviewSchema),
+  async (req, res) => {
+    const { ids } = req.body as z.infer<typeof registrationReviewSchema>;
+    const actorUserId = authenticatedUserId(req);
+    const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+
+    for (const id of [...new Set(ids)]) {
+      try {
+        await withTransaction(async (client) => {
+          const registration = await getRegistrationForUpdate(id, client);
+          if (!registration) {
+            throw new ApiError(404, 'Registration request not found.');
+          }
+          if (registration.status !== 'pending') {
+            throw new ApiError(409, 'This request was already reviewed.');
+          }
+
+          const existing = await findUserByEmail(registration.email);
+          if (existing) {
+            throw new ApiError(
+              409,
+              'An account with this email already exists. Enroll the student from the class roster instead.',
+            );
+          }
+
+          const student = await createUser(
+            {
+              email: registration.email,
+              fullName: registration.fullName,
+              role: 'student',
+              passwordHash: registration.passwordHash,
+              registerNumber: registration.registerNumber,
+              phone: registration.phone,
+            },
+            client,
+          ).catch((error: unknown) =>
+            throwIfUniqueViolation(
+              error,
+              {
+                users_email_lower_key:
+                  'An account with this email already exists. Enroll the student from the class roster instead.',
+                users_register_number_key:
+                  'Another account already uses this register number. Reject this request so the student can correct it and register again.',
+              },
+              'A conflicting account already exists.',
+            ),
+          );
+
+          await createEnrollment(registration.classId, student.id, client);
+          const approved = await approveRegistration(id, actorUserId, student.id, client);
+          if (!approved) {
+            throw new ApiError(409, 'This request was already reviewed.');
+          }
+
+          await logAudit(
+            {
+              actorUserId,
+              action: 'admin.registration_approve',
+              entityType: 'student_registration',
+              entityId: id,
+              oldValue: { status: 'pending' },
+              newValue: {
+                status: 'approved',
+                studentUserId: student.id,
+                classId: registration.classId,
+                email: registration.email,
+                registerNumber: registration.registerNumber,
+              },
+              ip: req.ip ?? null,
+            },
+            client,
+          );
+        });
+        results.push({ id, ok: true });
+      } catch (error) {
+        results.push({
+          id,
+          ok: false,
+          error:
+            error instanceof ApiError ? error.message : 'Something went wrong; please try again.',
+        });
+      }
+    }
+
+    const approvedCount = results.filter((result) => result.ok).length;
+    res.json({ results, approved: approvedCount, failed: results.length - approvedCount });
+  },
+);
+
+/** POST /api/admin/registrations/reject — reject one or many requests. */
+adminRouter.post(
+  '/admin/registrations/reject',
+  validateBody(registrationReviewSchema),
+  async (req, res) => {
+    const { ids } = req.body as z.infer<typeof registrationReviewSchema>;
+    const actorUserId = authenticatedUserId(req);
+    const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+
+    for (const id of [...new Set(ids)]) {
+      try {
+        await withTransaction(async (client) => {
+          const rejected = await rejectRegistration(id, actorUserId, client);
+          if (!rejected) {
+            throw new ApiError(409, 'This request was already reviewed.');
+          }
+          await logAudit(
+            {
+              actorUserId,
+              action: 'admin.registration_reject',
+              entityType: 'student_registration',
+              entityId: id,
+              oldValue: { status: 'pending' },
+              newValue: {
+                status: 'rejected',
+                email: rejected.email,
+                registerNumber: rejected.registerNumber,
+              },
+              ip: req.ip ?? null,
+            },
+            client,
+          );
+        });
+        results.push({ id, ok: true });
+      } catch (error) {
+        results.push({
+          id,
+          ok: false,
+          error:
+            error instanceof ApiError ? error.message : 'Something went wrong; please try again.',
+        });
+      }
+    }
+
+    const rejectedCount = results.filter((result) => result.ok).length;
+    res.json({ results, rejected: rejectedCount, failed: results.length - rejectedCount });
   },
 );
 

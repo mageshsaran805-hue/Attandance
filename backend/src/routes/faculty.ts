@@ -4,7 +4,7 @@ import { withTransaction } from '../db/transactions.js';
 import { ApiError } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
 import { throwIfUniqueViolation } from '../lib/pg-errors.js';
-import { emailSchema, fullNameSchema, passwordSchema } from '../lib/schemas.js';
+import { emailSchema, fullNameSchema, passwordSchema, phoneSchema, registerNumberSchema } from '../lib/schemas.js';
 import { authenticatedUserId, requireAuth, requireRole } from '../middleware/auth.js';
 import { validateBody, validateParams } from '../middleware/validate.js';
 import { logAudit } from '../services/audit.js';
@@ -50,23 +50,33 @@ const studentCreateSchema = z.object({
   fullName: fullNameSchema,
   email: emailSchema,
   password: passwordSchema,
+  registerNumber: registerNumberSchema.optional(),
+  phone: phoneSchema.optional(),
 });
 
 const studentUpdateSchema = z
   .object({
     fullName: fullNameSchema.optional(),
     email: emailSchema.optional(),
+    registerNumber: registerNumberSchema.optional(),
+    phone: phoneSchema.optional(),
   })
-  .refine((value) => value.fullName !== undefined || value.email !== undefined, {
-    message: 'provide fullName and/or email',
-  });
+  .refine(
+    (value) =>
+      value.fullName !== undefined ||
+      value.email !== undefined ||
+      value.registerNumber !== undefined ||
+      value.phone !== undefined,
+    { message: 'provide at least one field to update' },
+  );
 
 const enrollExistingSchema = z.object({ email: emailSchema });
 
 const passwordResetSchema = z.object({ newPassword: passwordSchema });
 
-const USER_EMAIL_UNIQUE_MESSAGES: Record<string, string> = {
+const USERS_UNIQUE_MESSAGES: Record<string, string> = {
   users_email_lower_key: 'An account with this email already exists.',
+  users_register_number_key: 'Another student account already uses this register number.',
 };
 
 const NOT_ENROLLED_MESSAGE = 'Student is not actively enrolled in this class.';
@@ -124,10 +134,17 @@ facultyRouter.post(
     const passwordHash = await hashPassword(input.password);
     const created = await withTransaction(async (client) => {
       const student = await createUser(
-        { email: input.email, fullName: input.fullName, role: 'student', passwordHash },
+        {
+          email: input.email,
+          fullName: input.fullName,
+          role: 'student',
+          passwordHash,
+          registerNumber: input.registerNumber ?? null,
+          phone: input.phone ?? null,
+        },
         client,
       ).catch((error: unknown) =>
-        throwIfUniqueViolation(error, USER_EMAIL_UNIQUE_MESSAGES, 'An account with this email already exists.'),
+        throwIfUniqueViolation(error, USERS_UNIQUE_MESSAGES, 'A conflicting account already exists.'),
       );
       const enrollment = await createEnrollment(id, student.id, client);
       await logAudit(
@@ -136,7 +153,12 @@ facultyRouter.post(
           action: 'faculty.student_create',
           entityType: 'user',
           entityId: student.id,
-          newValue: { email: student.email, fullName: student.fullName, classId: id },
+          newValue: {
+            email: student.email,
+            fullName: student.fullName,
+            registerNumber: student.registerNumber,
+            classId: id,
+          },
           ip: req.ip ?? null,
         },
         client,
@@ -246,10 +268,15 @@ facultyRouter.patch(
     const updated = await withTransaction(async (client) => {
       const row = await updateUserProfile(
         studentUserId,
-        { fullName: input.fullName ?? target.fullName, email: input.email ?? target.email },
+        {
+          fullName: input.fullName ?? target.fullName,
+          email: input.email ?? target.email,
+          registerNumber: input.registerNumber ?? null,
+          phone: input.phone ?? null,
+        },
         client,
       ).catch((error: unknown) =>
-        throwIfUniqueViolation(error, USER_EMAIL_UNIQUE_MESSAGES, 'An account with this email already exists.'),
+        throwIfUniqueViolation(error, USERS_UNIQUE_MESSAGES, 'A conflicting account already exists.'),
       );
       if (!row) {
         throw new ApiError(404, NOT_ENROLLED_MESSAGE);
@@ -260,8 +287,16 @@ facultyRouter.patch(
           action: 'faculty.student_update',
           entityType: 'user',
           entityId: studentUserId,
-          oldValue: { fullName: target.fullName, email: target.email },
-          newValue: { fullName: row.fullName, email: row.email },
+          oldValue: {
+            fullName: target.fullName,
+            email: target.email,
+            registerNumber: target.registerNumber,
+          },
+          newValue: {
+            fullName: row.fullName,
+            email: row.email,
+            registerNumber: row.registerNumber,
+          },
           ip: req.ip ?? null,
         },
         client,

@@ -81,10 +81,13 @@ wrong role, 404 out of scope).
 | --- | --- | --- | --- |
 | Login | 10 failures / 15 min | IP | Successful logins are not counted. |
 | Student self-marking | 30 failures / 15 min | Student id | Successful marks not counted, so a whole class on one campus IP is fine. In addition to the per-OTP 5-attempt cap. |
+| Registration submissions | 30 requests / 15 min | IP | Phase 6 public write endpoint; every submission counts. A coarse spam guard — the real duplicate guard is the partial unique index on pending email / register number. |
 
 Both use `express-rate-limit` with `standardHeaders: 'draft-8'` and return a
 plain 429 JSON error. The marking limiter runs after authentication, so the
-key is the account, not the network.
+key is the account, not the network. Behind the free-tier proxy chain `req.ip`
+may be a CDN address (see `docs/deployment-free.md`), which makes the
+IP-keyed limits coarser, not weaker than their cap.
 
 Accepted by design: the limiter store is in-process memory. This is correct
 for the single-instance deployment this project targets; a multi-instance
@@ -98,7 +101,10 @@ follow-up.
 - The Phase 5 admin view (`GET /api/admin/audit`) is admin-only, read-only,
   filtered and paginated. Rows are never updated or deleted by the
   application.
-- Failed logins with unknown emails are recorded with a null actor.
+- Failed logins with unknown emails are recorded with a null actor. Public
+  registration submissions (`registration.submit`, Phase 6) are also logged
+  with a null actor; the student's chosen password appears only as its
+  Argon2id hash in the audit-free request row.
 
 ## 8. Transport, headers and secrets
 

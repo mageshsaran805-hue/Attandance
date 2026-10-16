@@ -1,9 +1,12 @@
 # Database Design
 
-The schema described here is **implemented by migration
+The schema described here is **implemented by migrations
 [`0001_core_schema.sql`](../database/migrations/0001_core_schema.sql)**
-(Phase 2). This document is the design reference for that migration and for
-future ones; keep it in sync when the schema changes.
+(Phase 2) and
+**[`0002_student_registrations.sql`](../database/migrations/0002_student_registrations.sql)**
+(Phase 6, student self-registration). This document is the design reference
+for those migrations and for future ones; keep it in sync when the schema
+changes.
 
 Database: Supabase-hosted PostgreSQL 15+ (managed). PostgreSQL 13+ is
 required (`gen_random_uuid()` is built in; no extensions needed).
@@ -19,6 +22,12 @@ required (`gen_random_uuid()` is built in; no extensions needed).
 - **Attendance**: one session per class per IST calendar date; "pending" is
   the absence of a record while the session is open; closing materializes
   absent records for everyone still pending.
+- **Student self-registration is request-based**: the public form only
+  inserts a `student_registrations` row (password already Argon2id-hashed).
+  An administrator approves it, which creates the active student account and
+  enrolls it in the chosen class in one transaction; rejecting keeps the row
+  for history. At most one *pending* request per email and per register
+  number; rejected requests free their details for a corrected resubmission.
 - **Supabase hardening** — row-level security is enabled on every table (no
   policies: deny-all for non-owner roles) and all privileges are revoked from
   the PostgREST roles `anon`/`authenticated`. The backend connects as the
@@ -73,7 +82,29 @@ One row per person who can log in, any role.
 | `full_name` | display name |
 | `role` | enum: `admin`, `hod`, `faculty`, `student` |
 | `is_active` | deactivation instead of deletion |
+| `register_number` | nullable (added in 0002); student roll number, unique case-insensitive among non-null values (`users_register_number_key`) |
+| `phone` | nullable (added in 0002); student contact number |
 | `created_at`, `updated_at` | timestamptz |
+
+### student_registrations (added in 0002)
+
+Public self-registration requests. A row is created by the unauthenticated
+form; approving it is the only way a `users` row is created from it, and the
+row is never deleted (pending → approved/rejected once).
+
+| Column | Notes |
+| --- | --- |
+| `id` | uuid, PK |
+| `full_name`, `email`, `register_number` | submitted details; email/register number are matched case-insensitively |
+| `phone` | nullable |
+| `class_id` | FK → classes; the class the student chose, enrolled on approval |
+| `password_hash` | Argon2id hash captured at submission; the plaintext password never reaches the database or logs |
+| `status` | enum `registration_status`: `pending`, `approved`, `rejected` |
+| `submitted_at` | |
+| `reviewed_by`, `reviewed_at` | who reviewed it and when (NULL while pending) |
+| `created_user_id` | the student account created on approval (NULL while pending/rejected) |
+| check | `student_registrations_review_consistency`: reviewed rows always carry reviewer + time; approved rows always carry `created_user_id`; pending rows carry neither |
+| indexes | partial unique `lower(email)` WHERE pending; partial unique `lower(register_number)` WHERE pending; (`status`, `submitted_at`); `class_id` |
 
 ### departments
 
@@ -221,6 +252,10 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
    `unassigned_at IS NULL`.
 7. **Students can access only their own attendance history** — student
    queries are always filtered by `student_user_id = <current user id>`.
+8. **Approval is the only path from a registration to an account** — the
+   admin approve endpoint locks the pending row (`FOR UPDATE`), creates the
+   account and enrollment, and marks the registration approved in one
+   transaction with an audit row; concurrent reviews settle exactly once.
 
 ## Access-control matrix (target behaviour)
 
@@ -233,6 +268,8 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
 | Open/close sessions, manual marks | – | – | assigned classes | – |
 | Enter OTP for self | – | – | – | own class, once/day |
 | Reports | system-wide | own department | assigned classes | own history only |
+| Submit self-registration | – (anyone, no account needed) | – | – | – |
+| Review registrations (approve/reject) | ✅ | – | – | – |
 
 ## Migrations
 

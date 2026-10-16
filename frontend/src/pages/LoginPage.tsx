@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router'
+import { Link, Navigate } from 'react-router'
 import HealthIndicator from '../components/HealthIndicator'
 import LoadingScreen from '../components/LoadingScreen'
 import { useAuth } from '../lib/auth-context'
@@ -107,6 +107,13 @@ export default function LoginPage() {
               {submitting ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
+          <p className="mt-5 text-sm text-slate-500">
+            New student without an account?{' '}
+            <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-700">
+              Submit a registration request
+            </Link>
+          </p>
 
           <details className="mt-5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
             <summary className="cursor-pointer select-none font-medium text-slate-600">

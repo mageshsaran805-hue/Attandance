@@ -68,6 +68,9 @@ export interface AdminUserRow {
   fullName: string;
   role: UserRole;
   isActive: boolean;
+  /** Student profile fields; null for staff accounts. */
+  registerNumber: string | null;
+  phone: string | null;
   createdAt: string;
 }
 
@@ -83,10 +86,13 @@ interface DbAdminUserRow {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  register_number: string | null;
+  phone: string | null;
   created_at: string;
 }
 
-const ADMIN_USER_COLUMNS = 'id, email, full_name, role, is_active, created_at';
+const ADMIN_USER_COLUMNS =
+  'id, email, full_name, role, is_active, register_number, phone, created_at';
 
 function mapAdminUser(row: DbAdminUserRow): AdminUserRow {
   return {
@@ -95,6 +101,8 @@ function mapAdminUser(row: DbAdminUserRow): AdminUserRow {
     fullName: row.full_name,
     role: row.role,
     isActive: row.is_active,
+    registerNumber: row.register_number,
+    phone: row.phone,
     createdAt: row.created_at,
   };
 }
@@ -134,28 +142,53 @@ export async function findUserById(
 }
 
 export async function createUser(
-  input: { email: string; fullName: string; role: UserRole; passwordHash: string },
+  input: {
+    email: string;
+    fullName: string;
+    role: UserRole;
+    passwordHash: string;
+    registerNumber?: string | null;
+    phone?: string | null;
+  },
   client?: Pool | PoolClient,
 ): Promise<AdminUserRow> {
   const db = client ?? getPool();
   const { rows } = await db.query<DbAdminUserRow>(
-    `INSERT INTO users (email, full_name, role, password_hash)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO users (email, full_name, role, password_hash, register_number, phone)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING ${ADMIN_USER_COLUMNS}`,
-    [input.email, input.fullName, input.role, input.passwordHash],
+    [
+      input.email,
+      input.fullName,
+      input.role,
+      input.passwordHash,
+      input.registerNumber ?? null,
+      input.phone ?? null,
+    ],
   );
   return mapAdminUser(expectRow(rows[0], 'users: insert'));
 }
 
+/**
+ * Updates profile fields. Register number and phone are only changed when a
+ * value is provided (COALESCE): clearing them is not supported yet, and
+ * callers that do not manage them (e.g. admin name/email edits) keep them.
+ */
 export async function updateUserProfile(
   id: string,
-  input: { fullName: string; email: string },
+  input: { fullName: string; email: string; registerNumber?: string | null; phone?: string | null },
   client?: Pool | PoolClient,
 ): Promise<AdminUserRow | null> {
   const db = client ?? getPool();
   const { rows } = await db.query<DbAdminUserRow>(
-    `UPDATE users SET full_name = $2, email = $3 WHERE id = $1 RETURNING ${ADMIN_USER_COLUMNS}`,
-    [id, input.fullName, input.email],
+    `UPDATE users
+        SET full_name = $2,
+            email = $3,
+            register_number = COALESCE($4, register_number),
+            phone = COALESCE($5, phone)
+      WHERE id = $1
+      RETURNING ${ADMIN_USER_COLUMNS}`,
+    [id, input.fullName, input.email, input.registerNumber ?? null, input.phone ?? null],
   );
   const row = rows[0];
   return row ? mapAdminUser(row) : null;

@@ -92,8 +92,9 @@ when backend behaviour changed. Report only results that were actually observed.
   `?from=YYYY-MM-DD&to=YYYY-MM-DD` (college timezone; default last 30 days,
   max 366). The admin audit view is read-only and paginated.
 - Rate limits (in-memory, per process): login 10 failures / 15 min / IP;
-  student self-marking 30 failures / 15 min / student. Successful requests
-  are never counted.
+  student self-marking 30 failures / 15 min / student; registration
+  submissions 30 requests / 15 min / IP. Successful requests
+  are never counted (except registrations, where every submission counts).
 - `TRUST_PROXY_HOPS` (default 0) sets Express `trust proxy`; use 1 behind a
   single reverse proxy so rate limits key on real client IPs, keep 0 when the
   API is directly reachable. `npm run create-admin` bootstraps/promotes a real
@@ -125,6 +126,13 @@ when backend behaviour changed. Report only results that were actually observed.
   view with filters and paging, per-student rate limiting on failed
   self-marking attempts, dependency-free security headers, and the security
   review in `docs/security.md`.
+- **Phase 6 — student self-registration (done):** public `/register` form
+  (name, email, register number, phone, department + class, password) that
+  creates a pending `student_registrations` request; admin-only review queue
+  (`/admin/registrations`) with single and bulk approve/reject — approval
+  creates the active student account with the submitted password and
+  auto-enrolls it in the chosen class, all audit-logged; register number and
+  phone live on `users` and are editable from the faculty roster.
 - **Post-plan (done):** housekeeping (removed an unused component), GitHub
   Actions CI (`.github/workflows/ci.yml`: backend build + full tests against
   a disposable Postgres, frontend lint + build), production

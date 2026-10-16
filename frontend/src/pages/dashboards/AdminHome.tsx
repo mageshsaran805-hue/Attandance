@@ -24,6 +24,11 @@ const QUICK_LINKS = [
     description: 'Manage HOD, faculty and administrator accounts.',
   },
   {
+    to: '/admin/registrations',
+    title: 'Student registrations',
+    description: 'Review self-registration requests and approve or reject them.',
+  },
+  {
     to: '/admin/reports',
     title: 'Reports',
     description: 'Attendance percentages by department and class.',
@@ -54,13 +59,18 @@ export default function AdminHome() {
 
       {overview.data && (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Departments" value={overview.data.counts.departments} />
             <StatCard label="Classes" value={overview.data.counts.classes} />
             <StatCard
               label="Students"
               value={overview.data.counts.accounts.students}
               hint="Active student accounts"
+            />
+            <StatCard
+              label="Registrations"
+              value={overview.data.counts.pendingRegistrations}
+              hint="Pending review"
             />
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">

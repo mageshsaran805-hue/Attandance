@@ -242,3 +242,63 @@ export async function countClasses(client?: Pool | PoolClient): Promise<number> 
   const { rows } = await db.query<{ count: number }>('SELECT count(*)::int AS count FROM classes');
   return expectRow(rows[0], 'classes: count').count;
 }
+
+// ---------------------------------------------------------------------------
+// Public class choices (student self-registration form)
+// ---------------------------------------------------------------------------
+
+export interface PublicClassChoice {
+  id: string;
+  name: string;
+  academicYear: string;
+}
+
+export interface PublicDepartmentChoice {
+  id: string;
+  name: string;
+  code: string;
+  classes: PublicClassChoice[];
+}
+
+interface DbPublicChoiceRow {
+  department_id: string;
+  department_name: string;
+  department_code: string;
+  class_id: string;
+  class_name: string;
+  academic_year: string;
+}
+
+/**
+ * Departments with the classes a new student can choose, for the public
+ * registration form. No counts or staff data are exposed.
+ */
+export async function listDepartmentsWithClasses(): Promise<PublicDepartmentChoice[]> {
+  const { rows } = await getPool().query<DbPublicChoiceRow>(
+    `SELECT d.id AS department_id, d.name AS department_name, d.code AS department_code,
+            c.id AS class_id, c.name AS class_name, c.academic_year
+       FROM departments d
+       JOIN classes c ON c.department_id = d.id
+      ORDER BY d.name, c.name`,
+  );
+
+  const departments = new Map<string, PublicDepartmentChoice>();
+  for (const row of rows) {
+    let department = departments.get(row.department_id);
+    if (!department) {
+      department = {
+        id: row.department_id,
+        name: row.department_name,
+        code: row.department_code,
+        classes: [],
+      };
+      departments.set(row.department_id, department);
+    }
+    department.classes.push({
+      id: row.class_id,
+      name: row.class_name,
+      academicYear: row.academic_year,
+    });
+  }
+  return [...departments.values()];
+}

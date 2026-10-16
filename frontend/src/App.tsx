@@ -7,6 +7,7 @@ import { HOME_PATH_BY_ROLE } from './lib/roles'
 import AdminClassesPage from './pages/admin/AdminClassesPage'
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage'
 import AdminAuditPage from './pages/admin/AdminAuditPage'
+import AdminRegistrationsPage from './pages/admin/AdminRegistrationsPage'
 import AdminReportsPage from './pages/admin/AdminReportsPage'
 import AdminUsersPage from './pages/admin/AdminUsersPage'
 import AdminHome from './pages/dashboards/AdminHome'
@@ -21,6 +22,7 @@ import HodClassReportPage from './pages/hod/HodClassReportPage'
 import HodReportsPage from './pages/hod/HodReportsPage'
 import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
+import RegisterPage from './pages/RegisterPage'
 
 function RootRedirect() {
   const { user, status } = useAuth()
@@ -38,6 +40,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
           <Route
             path="/admin"
@@ -68,6 +71,14 @@ export default function App() {
             element={
               <RequireAuth roles={['admin']}>
                 <AdminUsersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/registrations"
+            element={
+              <RequireAuth roles={['admin']}>
+                <AdminRegistrationsPage />
               </RequireAuth>
             }
           />

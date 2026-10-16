@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.js';
 import { facultyRouter } from './routes/faculty.js';
 import { healthRouter } from './routes/health.js';
 import { hodRouter } from './routes/hod.js';
+import { registrationRouter } from './routes/registration.js';
 import { reportsRouter } from './routes/reports.js';
 
 /**
@@ -47,6 +48,7 @@ export function createApp(): Express {
 
   app.use('/api', healthRouter);
   app.use('/api', authRouter);
+  app.use('/api', registrationRouter);
   app.use('/api', adminRouter);
   app.use('/api', hodRouter);
   app.use('/api', facultyRouter);
