@@ -13,7 +13,11 @@ const pool = env.DATABASE_URL
   ? new pg.Pool({
       connectionString: env.DATABASE_URL,
       max: 5,
-      connectionTimeoutMillis: 5_000,
+      // Hosted poolers (Supabase/Supavisor) can stall or drop long-idle
+      // sessions; keepalive plus a 10s connect budget makes the first query
+      // after an idle period resilient to brief pooler hiccups.
+      keepAlive: true,
+      connectionTimeoutMillis: 10_000,
       idleTimeoutMillis: 30_000,
     })
   : null;
