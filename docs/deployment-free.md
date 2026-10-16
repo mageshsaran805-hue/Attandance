@@ -95,7 +95,7 @@ The repository ships a Render Blueprint (`render.yaml`).
 
 Prefer clicking over Blueprints? Create a web service manually with the
 same settings: Node runtime, root directory `backend`, build
-`npm ci && npm run build`, start `npm start`, plan **Free**, region
+`npm ci --include=dev && npm run build`, start `npm start`, plan **Free**, region
 **Singapore**, health check path `/api/health`, and the environment
 variables from `render.yaml`.
 
@@ -206,6 +206,7 @@ web service running alongside it.
 | First request of the day times out | Cold start | Retry once; confirm the uptime monitor is running |
 | `"database":{"status":"down"}` | Secret file missing/misnamed, or `sslrootcert` path wrong in `DATABASE_URL` | Fix in Render → Environment, redeploy (a secret-file change redeploys by itself) |
 | Render asks for a different service name | `onrender.com` names are global | Change `name:` in `render.yaml` |
+| Build fails: `Cannot find type definition file for 'node'` (or `tsc: not found`) | `NODE_ENV=production` makes npm skip devDependencies, so TypeScript/`@types/*` are missing | Keep `--include=dev` in the build command (`npm ci --include=dev && npm run build`), as `render.yaml` does |
 | Deploy stuck waiting on checks | CI failed or did not run for that commit | Fix CI, or set `autoDeployTrigger: commit` |
 | Cookie never appears after login | Site opened over `http://` or on a deploy-preview URL | Use the HTTPS site URL |
 

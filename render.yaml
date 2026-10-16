@@ -18,7 +18,9 @@ services:
     plan: free # 0.1 CPU / 512 MB; sleeps after 15 idle minutes
     region: singapore # closest free Render region to India
     rootDir: backend
-    buildCommand: npm ci && npm run build
+    # --include=dev: NODE_ENV=production below makes plain `npm ci` skip
+    # devDependencies, but the build needs TypeScript and @types/*.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start # node dist/index.js
     healthCheckPath: /api/health # always 200 while the process can answer
     autoDeployTrigger: checksPass # deploy only when GitHub CI is green
