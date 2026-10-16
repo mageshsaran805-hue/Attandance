@@ -13,11 +13,12 @@
 # so the Secure/SameSite=Lax session cookie and the CSRF double-submit cookie
 # keep working exactly as audited — no application code changes.
 #
-# Replace the host with your Render service URL (deployment-free.md step 4).
-# Rules are applied top-to-bottom.
+# Proxies to the Render service defined in render.yaml
+# (https://college-attendance-api.onrender.com). If that service's URL ever
+# changes, update the host here. Rules are applied top-to-bottom.
 [[redirects]]
   from = "/api/*"
-  to = "https://REPLACE-WITH-YOUR-RENDER-SERVICE.onrender.com/api/:splat"
+  to = "https://college-attendance-api.onrender.com/api/:splat"
   status = 200
   force = true
 
