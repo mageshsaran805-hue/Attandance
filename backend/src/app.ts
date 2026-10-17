@@ -5,6 +5,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { adminRouter } from './routes/admin.js';
 import { attendanceRouter } from './routes/attendance.js';
 import { authRouter } from './routes/auth.js';
+import { adminCalendarRouter, calendarRouter } from './routes/calendar.js';
 import { facultyRouter } from './routes/faculty.js';
 import { healthRouter } from './routes/health.js';
 import { hodRouter } from './routes/hod.js';
@@ -49,7 +50,9 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api', authRouter);
   app.use('/api', registrationRouter);
+  app.use('/api', calendarRouter);
   app.use('/api', adminRouter);
+  app.use('/api', adminCalendarRouter);
   app.use('/api', hodRouter);
   app.use('/api', facultyRouter);
   app.use('/api', attendanceRouter);

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import AppShell from '../../components/AppShell'
+import AttendanceCalendar from '../../components/AttendanceCalendar'
 import DateRangeFilter from '../../components/DateRangeFilter'
 import Alert from '../../components/ui/Alert'
 import Badge from '../../components/ui/Badge'
@@ -57,6 +58,8 @@ export default function StudentHome() {
         </div>
       )}
 
+      <AttendanceCalendar />
+
       <StudentHistory />
     </AppShell>
   )
@@ -94,6 +97,8 @@ function StudentClassCard({ entry, onChanged }: { entry: StudentTodayEntry; onCh
         {record ? (
           record.status === 'present' ? (
             <Badge tone="success">Present</Badge>
+          ) : record.status === 'on_duty' ? (
+            <Badge tone="sky">On duty</Badge>
           ) : (
             <Badge tone="warning">Absent</Badge>
           )
@@ -111,7 +116,11 @@ function StudentClassCard({ entry, onChanged }: { entry: StudentTodayEntry; onCh
 
         {session && record && (
           <p className="text-sm text-slate-600">
-            {record.status === 'present' ? 'You were marked present' : 'You were marked absent'}
+            {record.status === 'present'
+              ? 'You were marked present'
+              : record.status === 'on_duty'
+                ? 'You were marked on duty (excused)'
+                : 'You were marked absent'}
             {record.method === 'otp' ? ' with the OTP' : ' by your faculty member'} at{' '}
             {formatDateTime(record.markedAt)}.
             {record.status === 'absent'
@@ -201,13 +210,14 @@ function StudentHistory() {
 
       {history.data && (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             <StatCard label="Present" value={history.data.totals.present} />
+            <StatCard label="On duty" value={history.data.totals.onDuty} hint="Excused" />
             <StatCard label="Absent" value={history.data.totals.absent} />
             <StatCard
               label="Attendance"
               value={formatPercent(history.data.totals.percentage)}
-              hint="Present ÷ settled sessions"
+              hint="Present + OD ÷ settled sessions"
             />
             <StatCard
               label="Sessions in range"
@@ -244,6 +254,8 @@ function StudentHistory() {
                       <Td>
                         {entry.status === 'present' ? (
                           <Badge tone="success">Present</Badge>
+                        ) : entry.status === 'on_duty' ? (
+                          <Badge tone="sky">On duty</Badge>
                         ) : entry.status === 'absent' ? (
                           <Badge tone="warning">Absent</Badge>
                         ) : entry.sessionStatus === 'open' ? (

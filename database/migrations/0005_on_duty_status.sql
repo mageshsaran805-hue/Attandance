@@ -1,0 +1,23 @@
+-- ============================================================================
+-- 0005_on_duty_status.sql
+-- Adds an 'on_duty' attendance status: the student was officially engaged
+-- elsewhere (sports, fest duty, placement training, ...) and is excused.
+--
+-- Design reference: docs/database-design.md (updated alongside this file).
+--
+-- Settled decisions reflected here:
+--   * 'on_duty' records are faculty-only (manual marks); students cannot
+--     self-mark OD with the OTP.
+--   * OD counts as attendance for percentages:
+--       percentage = (present + on_duty) / (present + on_duty + absent)
+--     so OD students are never punished, while reports still show the
+--     distinction between self-marks and OD marks.
+--   * Closing a session materializes only truly pending students as absent;
+--     existing OD records are untouched (they are records, not pending).
+--   * PostgreSQL 12+ allows ALTER TYPE ... ADD VALUE inside a transaction as
+--     long as the new value is not used in the same transaction; the runner
+--     wraps this file and nothing else in it uses the new value.
+--   * The runner wraps this file in a transaction; do NOT add BEGIN/COMMIT.
+-- ============================================================================
+
+ALTER TYPE attendance_status ADD VALUE IF NOT EXISTS 'on_duty';

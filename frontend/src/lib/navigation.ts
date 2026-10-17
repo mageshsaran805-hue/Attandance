@@ -18,6 +18,7 @@ export const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { to: '/admin/classes', label: 'Classes' },
     { to: '/admin/users', label: 'Accounts' },
     { to: '/admin/registrations', label: 'Registrations' },
+    { to: '/admin/calendar', label: 'Calendar' },
     { to: '/admin/reports', label: 'Reports' },
     { to: '/admin/audit', label: 'Audit log' },
   ],

@@ -75,7 +75,7 @@ const sessionParamSchema = z.object({ sessionId: z.uuid('must be a valid session
 
 const manualMarkSchema = z.object({
   studentUserId: z.uuid('must be a valid student id'),
-  status: z.enum(['present', 'absent'], 'must be present or absent'),
+  status: z.enum(['present', 'absent', 'on_duty'], 'must be present, absent or on duty'),
 });
 
 const markAllSchema = z.object({

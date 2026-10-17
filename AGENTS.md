@@ -85,12 +85,21 @@ when backend behaviour changed. Report only results that were actually observed.
   absent records for everyone still pending; students can self-mark only on
   the session's calendar date. OTP: 6 digits, 10-minute expiry, 5 attempts
   per OTP generation (regenerating the OTP resets the counter and invalidates
-  the old code); `otp_attempts` records never contain code values.
+  the old code); `otp_attempts` records never contain code values. On-duty
+  (`on_duty`) records are faculty-only manual marks (excused attendance): they
+  count as present in percentages, closing never overwrites them, and bulk
+  mark-all stays present/absent only.
+- Calendar semantics: admins manage `non_working_days` (date + label,
+  audit-logged; `/api/calendar/non-working-days` read for every signed-in
+  role); faculty get a confirm dialog before opening a session on a
+  non-working day and students see a month grid. Holidays never block
+  sessions and never change report math.
 - Reporting semantics: percentages count closed sessions only (open sessions
-  are listed as pending and excluded); percentage = present / (present +
-  absent), rounded to one decimal, null when nothing is settled. Ranges are
-  `?from=YYYY-MM-DD&to=YYYY-MM-DD` (college timezone; default last 30 days,
-  max 366). The admin audit view is read-only and paginated.
+  are listed as pending and excluded); percentage = (present + on_duty) /
+  (present + on_duty + absent), rounded to one decimal, null when nothing is
+  settled. Ranges are `?from=YYYY-MM-DD&to=YYYY-MM-DD` (college timezone;
+  default last 30 days, max 366). The admin audit view is read-only and
+  paginated.
 - Rate limits (in-memory, per process): login 10 failures / 15 min / IP;
   student self-marking 30 failures / 15 min / student; registration
   submissions 30 requests / 15 min / IP. Successful requests
@@ -138,3 +147,10 @@ when backend behaviour changed. Report only results that were actually observed.
   a disposable Postgres, frontend lint + build), production
   `docs/deployment.md`, `TRUST_PROXY_HOPS` reverse-proxy support, and the
   `create-admin` bootstrap command.
+- **Post-plan — calendar + on-duty + PWA (done):** admin-managed
+  `non_working_days` (migration 0004) with a read API for all roles, an admin
+  Calendar page, a faculty warning/confirm when opening a session on a
+  holiday, and a student month calendar; `on_duty` attendance status
+  (migration 0005) with faculty-only marking, excused percentage math and
+  report columns; web-app manifest + icons (no service worker, by design) so
+  the site can be added to phone home screens.

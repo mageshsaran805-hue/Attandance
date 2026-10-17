@@ -13,11 +13,12 @@ import { apiFetch } from '../../lib/api'
 import type {
   FacultyClassResponse,
   FacultySessionsResponse,
+  NonWorkingDaysResponse,
   OpenSessionResponse,
   RosterEntry,
 } from '../../lib/api-types'
 import { storeSessionOtp } from '../../lib/attendance'
-import { formatDate, formatTime } from '../../lib/format'
+import { formatDate, formatTime, todayIso } from '../../lib/format'
 import { useAction } from '../../lib/forms'
 import { useFetch } from '../../lib/use-fetch'
 
@@ -38,6 +39,14 @@ export default function FacultyClassPage() {
   )
   const [flash, setFlash] = useState<Flash | null>(null)
   const openSession = useAction()
+
+  // College calendar: warn before opening a session on a non-working day.
+  const today = todayIso()
+  const calendar = useFetch<NonWorkingDaysResponse>(
+    `/api/calendar/non-working-days?from=${today}&to=${today}`,
+  )
+  const holiday = calendar.data?.nonWorkingDays[0] ?? null
+  const [openConfirmOpen, setOpenConfirmOpen] = useState(false)
 
   // Add student (create account + enroll).
   const [addOpen, setAddOpen] = useState(false)
@@ -83,6 +92,21 @@ export default function FacultyClassPage() {
       storeSessionOtp(result.session.id, result.otp)
       navigate(`/faculty/sessions/${result.session.id}`)
     })
+  }
+
+  /** On a non-working day, confirm first; otherwise open straight away. */
+  const requestOpenSession = () => {
+    openSession.reset()
+    if (holiday) {
+      setOpenConfirmOpen(true)
+      return
+    }
+    submitOpenSession()
+  }
+
+  const confirmOpenSession = () => {
+    setOpenConfirmOpen(false)
+    submitOpenSession()
   }
 
   const openAdd = () => {
@@ -274,8 +298,13 @@ export default function FacultyClassPage() {
                 Opening the session generates a one-time code students use to mark themselves
                 present.
               </p>
+              {holiday && (
+                <p className="mt-1 text-xs font-medium text-amber-700">
+                  Today is marked as a non-working day: {holiday.label}.
+                </p>
+              )}
             </div>
-            <Button variant="primary" loading={openSession.busy} onClick={submitOpenSession}>
+            <Button variant="primary" loading={openSession.busy} onClick={requestOpenSession}>
               Open today’s session
             </Button>
           </div>
@@ -298,12 +327,19 @@ export default function FacultyClassPage() {
                 </div>
                 <p className="mt-2 text-sm text-slate-600">
                   {attendance.data.today.counts.present} present ·{' '}
+                  {attendance.data.today.counts.onDuty} on duty ·{' '}
                   {attendance.data.today.counts.pending} pending ·{' '}
                   {attendance.data.today.counts.absent} absent
                   {attendance.data.today.status === 'open' && attendance.data.today.otpActive
                     ? ` · OTP valid until ${formatTime(attendance.data.today.otpExpiresAt)}`
                     : ''}
                 </p>
+                {holiday && (
+                  <p className="mt-1 text-xs font-medium text-amber-700">
+                    Today is marked as a non-working day ({holiday.label}); this session was opened
+                    anyway and counts normally once closed.
+                  </p>
+                )}
               </div>
               <Link
                 to={`/faculty/sessions/${attendance.data.today.id}`}
@@ -326,6 +362,7 @@ export default function FacultyClassPage() {
                   <Th>Date</Th>
                   <Th>Status</Th>
                   <Th>Present</Th>
+                  <Th>On duty</Th>
                   <Th>Pending</Th>
                   <Th>Absent</Th>
                   <Th>
@@ -347,6 +384,7 @@ export default function FacultyClassPage() {
                       )}
                     </Td>
                     <Td className="text-slate-600">{entry.counts.present}</Td>
+                    <Td className="text-slate-600">{entry.counts.onDuty}</Td>
                     <Td className="text-slate-600">{entry.counts.pending}</Td>
                     <Td className="text-slate-600">{entry.counts.absent}</Td>
                     <Td>
@@ -664,6 +702,19 @@ export default function FacultyClassPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={openConfirmOpen}
+        onClose={() => setOpenConfirmOpen(false)}
+        onConfirm={confirmOpenSession}
+        title="Open a session on a non-working day?"
+        message={`Today is marked as a non-working day${
+          holiday ? ` (${holiday.label})` : ''
+        }. You can still open the session — marks count normally — but attendance is usually not expected on holidays.`}
+        confirmLabel="Open anyway"
+        busy={openSession.busy}
+        error={openSession.error}
+      />
 
       <ConfirmDialog
         open={unenrollTarget !== null}

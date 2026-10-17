@@ -42,18 +42,19 @@ export default function AdminReportsPage() {
 
       {report.data && (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             <StatCard
               label="Settled sessions"
               value={report.data.totals.settledSessions}
               hint={`${report.data.totals.sessions} session${report.data.totals.sessions === 1 ? '' : 's'} in range`}
             />
             <StatCard label="Present marks" value={report.data.totals.present} />
+            <StatCard label="On duty" value={report.data.totals.onDuty} hint="Excused attendance" />
             <StatCard label="Absent marks" value={report.data.totals.absent} />
             <StatCard
               label="Attendance"
               value={formatPercent(report.data.totals.percentage)}
-              hint="Present ÷ settled marks"
+              hint="Present + OD ÷ settled marks"
             />
           </div>
 
@@ -75,6 +76,7 @@ export default function AdminReportsPage() {
                   <Th className="text-right">Students</Th>
                   <Th className="text-right">Settled</Th>
                   <Th className="text-right">Present</Th>
+                  <Th className="text-right">On duty</Th>
                   <Th className="text-right">Absent</Th>
                   <Th className="text-right">Attendance</Th>
                 </tr>
@@ -90,6 +92,7 @@ export default function AdminReportsPage() {
                     <Td className="text-right tabular-nums">{entry.studentCount}</Td>
                     <Td className="text-right tabular-nums">{entry.settledSessions}</Td>
                     <Td className="text-right tabular-nums">{entry.present}</Td>
+                    <Td className="text-right tabular-nums">{entry.onDuty}</Td>
                     <Td className="text-right tabular-nums">{entry.absent}</Td>
                     <Td className="text-right font-medium tabular-nums">
                       {formatPercent(entry.percentage)}
@@ -118,6 +121,7 @@ export default function AdminReportsPage() {
                   <Th className="text-right">Students</Th>
                   <Th className="text-right">Settled</Th>
                   <Th className="text-right">Present</Th>
+                  <Th className="text-right">On duty</Th>
                   <Th className="text-right">Absent</Th>
                   <Th className="text-right">Attendance</Th>
                 </tr>
@@ -133,6 +137,7 @@ export default function AdminReportsPage() {
                     <Td className="text-right tabular-nums">{entry.studentCount}</Td>
                     <Td className="text-right tabular-nums">{entry.settledSessions}</Td>
                     <Td className="text-right tabular-nums">{entry.present}</Td>
+                    <Td className="text-right tabular-nums">{entry.onDuty}</Td>
                     <Td className="text-right tabular-nums">{entry.absent}</Td>
                     <Td className="text-right font-medium tabular-nums">
                       {formatPercent(entry.percentage)}

@@ -299,6 +299,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 4,
       settledSessions: 3,
       present: 5,
+      onDuty: 0,
       absent: 4,
       percentage: 55.6,
     });
@@ -333,6 +334,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 1,
       settledSessions: 1,
       present: 1,
+      onDuty: 0,
       absent: 2,
       percentage: 33.3,
     });
@@ -349,6 +351,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 1,
       settledSessions: 0,
       present: 0,
+      onDuty: 0,
       absent: 0,
       percentage: null,
     });
@@ -367,6 +370,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 4,
       settledSessions: 3,
       present: 5,
+      onDuty: 0,
       absent: 4,
       percentage: 55.6,
     });
@@ -394,6 +398,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 1,
       settledSessions: 1,
       present: 1,
+      onDuty: 0,
       absent: 0,
       percentage: 100,
     });
@@ -439,6 +444,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 4,
       settledSessions: 3,
       present: 3,
+      onDuty: 0,
       absent: 0,
       percentage: 100,
     });
@@ -466,6 +472,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 4,
       settledSessions: 3,
       present: 1,
+      onDuty: 0,
       absent: 2,
       percentage: 33.3,
     });
@@ -477,6 +484,7 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 0,
       settledSessions: 0,
       present: 0,
+      onDuty: 0,
       absent: 0,
       percentage: null,
     });
@@ -488,10 +496,71 @@ describe.skipIf(!enabled)('reports integration (real database)', () => {
       sessions: 1,
       settledSessions: 1,
       present: 1,
+      onDuty: 0,
       absent: 0,
       percentage: 100,
     });
     expect(resB.body.sessions[0]).toMatchObject({ classId: classB1Id, status: 'present' });
+  });
+
+  it('counts on-duty marks as attendance in percentages', async () => {
+    const pool = getPool();
+
+    // A settled session with one present, one on-duty and one absent record:
+    // the OD mark must count like a present mark (2 of 3 settled = 66.7%).
+    const extra = await pool.query<{ id: string }>(
+      `INSERT INTO attendance_sessions (class_id, session_date, status, started_by, closed_by, closed_at)
+       VALUES ($1, $2, 'closed', $3, $3, now())
+       RETURNING id`,
+      [classA1Id, day(-2), facultyAId],
+    );
+    const extraSessionId = extra.rows[0]?.id ?? '';
+    expect(extraSessionId).not.toBe('');
+    await pool.query(
+      `INSERT INTO attendance_records (session_id, student_user_id, status, method, marked_by) VALUES
+         ($1, $2, 'present', 'otp', NULL),
+         ($1, $3, 'on_duty', 'manual', $5),
+         ($1, $4, 'absent', 'manual', $5)`,
+      [extraSessionId, student1Id, student2Id, student3Id, facultyAId],
+    );
+
+    const facultyA = await loginAs(facultyAEmail);
+    const res = await facultyA.get(
+      `/api/faculty/classes/${classA1Id}/report?from=${day(-2)}&to=${day(-2)}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.totals).toEqual({
+      sessions: 1,
+      settledSessions: 1,
+      present: 1,
+      onDuty: 1,
+      absent: 1,
+      percentage: 66.7,
+    });
+
+    const students = new Map(
+      (res.body.students as Array<{ studentUserId: string }>).map((row) => [row.studentUserId, row]),
+    );
+    expect(students.get(student1Id)).toMatchObject({ present: 1, onDuty: 0, absent: 0, percentage: 100 });
+    expect(students.get(student2Id)).toMatchObject({ present: 0, onDuty: 1, absent: 0, percentage: 100 });
+    expect(students.get(student3Id)).toMatchObject({ present: 0, onDuty: 0, absent: 1, percentage: 0 });
+    expect(res.body.sessions[0]).toMatchObject({ present: 1, onDuty: 1, absent: 1, pending: 0 });
+
+    // The student's own history shows the OD entry and counts it as attendance.
+    const student2 = await loginAs(student2Email);
+    const history = await student2.get(
+      `/api/student/attendance/history?from=${day(-2)}&to=${day(-2)}`,
+    );
+    expect(history.status).toBe(200);
+    expect(history.body.totals).toEqual({
+      sessions: 1,
+      settledSessions: 1,
+      present: 0,
+      onDuty: 1,
+      absent: 0,
+      percentage: 100,
+    });
+    expect(history.body.sessions[0]).toMatchObject({ status: 'on_duty', method: 'manual' });
   });
 
   it('lists the audit trail for admins with filters and paging', async () => {

@@ -24,6 +24,15 @@ required (`gen_random_uuid()` is built in; no extensions needed).
 - **Attendance**: one session per class per IST calendar date; "pending" is
   the absence of a record while the session is open; closing materializes
   absent records for everyone still pending.
+- **On duty is excused attendance** (added in 0005): an `on_duty` record is
+  faculty-only (manual marks; students cannot self-mark OD). It counts as
+  attendance in report percentages — `(present + on_duty) / (present +
+  on_duty + absent)` — while reports still show the distinction. Closing never
+  overwrites it: OD is a settled record, not pending.
+- **Non-working days are informational** (added in 0004): administrators mark
+  dates on the college calendar; students see them, faculty are warned before
+  opening a session on one, but nothing is blocked and report math is
+  unaffected (a holiday normally has no session at all).
 - **Student self-registration is request-based**: the public form only
   inserts a `student_registrations` row (password already Argon2id-hashed).
   An administrator approves it, which creates the active student account and
@@ -110,6 +119,20 @@ row is never deleted (pending → approved/rejected once).
 | check | `student_registrations_review_consistency`: reviewed rows always carry reviewer + time; approved rows always carry `created_user_id`; pending rows carry neither |
 | indexes | partial unique `lower(email)` WHERE pending; partial unique `lower(register_number)` WHERE pending; (`status`, `submitted_at`); `class_id` |
 
+### non_working_days (added in 0004)
+
+Administrator-managed college holidays. Informational only: the app warns
+(never blocks) when a session is opened on one, and reports are unaffected
+because a holiday normally has no session.
+
+| Column | Notes |
+| --- | --- |
+| `id` | uuid, PK |
+| `day` | `date`, **UNIQUE** — one row per calendar date (IST) |
+| `label` | the reason shown to students and faculty (e.g. "Diwali holiday"); must not be blank |
+| `created_by` | FK → users (the administrator who added it) |
+| `created_at` | |
+
 ### departments
 
 | Column | Notes |
@@ -185,7 +208,7 @@ faculty action. **No row = pending** while the session is open.
 | `id` | uuid, PK |
 | `session_id` | FK → attendance_sessions (unique-index prefix) |
 | `student_user_id` | FK → users (role `student`, enforced by trigger), indexed |
-| `status` | enum: `present`, `absent` |
+| `status` | enum: `present`, `absent`, `on_duty` (OD added in 0005; OD only ever written by manual faculty marks) |
 | `method` | enum: `otp` (self), `manual` (faculty/correction) |
 | `marked_by` | FK → users; **NULL for OTP self-marking**, set for manual marks |
 | `marked_at`, `updated_at` | |
@@ -235,15 +258,16 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
    derives the date in `APP_TIMEZONE`; the unique constraint on
    (`class_id`, `session_date`) makes a second session impossible at the
    database level, even under concurrent requests.
-2. **Students without a present record stay pending while the session is
-   open** — pending is the absence of a row in `attendance_records` for that
-   session. Nothing needs to be written at session start.
+2. **Students without a record stay pending while the session is open** —
+   pending is the absence of a row in `attendance_records` for that session.
+   Nothing needs to be written at session start. `on_duty` records are settled
+   attendance and therefore never counted as pending.
 3. **Closing a session marks remaining pending students absent** — inside one
    transaction: insert `absent` records (method `manual`, actor = closing
    faculty) for every actively enrolled student without a record, then set
    the session `closed` with `closed_by`/`closed_at`. The unique constraint
-   keeps this idempotent; the CHECK constraint keeps close metadata
-   consistent.
+   keeps this idempotent (existing marks — OTP, manual or OD — are untouched);
+   the CHECK constraint keeps close metadata consistent.
 4. **One attendance record per student per session** — unique
    (`session_id`, `student_user_id`). OTP self-marking uses
    `INSERT ... ON CONFLICT DO NOTHING` so a student cannot mark twice.
@@ -270,6 +294,7 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
 | Classes CRUD | ✅ | view own department | view assigned | – |
 | Faculty assignment | ✅ (any) | own department | – | – |
 | Open/close sessions, manual marks | – | – | assigned classes | – |
+| Calendar (non-working days) | manage + view | view | view | view |
 | Enter OTP for self | – | – | – | own class, once/day |
 | Reports | system-wide | own department | assigned classes | own history only |
 | Submit self-registration | – (anyone, no account needed) | – | – | – |

@@ -7,17 +7,20 @@ import { expectRow } from '../lib/errors.js';
  *
  * Pending is represented by the absence of a row in attendance_records while
  * the session is open; closing materializes 'absent' records for everyone
- * still pending (see materializeAbsentStudents). OTP values are only ever
- * stored as HMAC hashes (see lib/otp.ts), never in plaintext.
+ * still pending (see materializeAbsentStudents). 'on_duty' (OD) records are
+ * faculty-only excused marks: they count as attendance in reports and are
+ * never touched by closing. OTP values are only ever stored as HMAC hashes
+ * (see lib/otp.ts), never in plaintext.
  */
 
 export type SessionStatus = 'open' | 'closed';
-export type AttendanceStatus = 'present' | 'absent';
+export type AttendanceStatus = 'present' | 'absent' | 'on_duty';
 export type MarkMethod = 'otp' | 'manual';
 
 export interface AttendanceCounts {
   enrolled: number;
   present: number;
+  onDuty: number;
   absent: number;
   pending: number;
 }
@@ -103,6 +106,7 @@ interface DbSessionSummaryRow {
   created_at: string;
   enrolled_count: number;
   present_count: number;
+  on_duty_count: number;
   absent_count: number;
 }
 
@@ -149,9 +153,10 @@ const RECORD_COLUMNS = 'id, session_id, student_user_id, status, method, marked_
 
 /**
  * One session summary row with live counts. `pending` is derived: enrolled
- * students without a record yet. A late enrollment after a session closed can
- * make pending positive for a closed session, which is why pending is clamped
- * at zero instead of computed as enrolled - present - absent exactly.
+ * students without a record yet (on-duty records settle a student, so they
+ * are subtracted too). A late enrollment after a session closed can make
+ * pending positive for a closed session, which is why pending is clamped at
+ * zero instead of computed as enrolled - present - OD - absent exactly.
  */
 const SESSION_SUMMARY_SQL = `
   SELECT s.id, s.class_id, c.name AS class_name, s.session_date::text AS session_date,
@@ -162,6 +167,8 @@ const SESSION_SUMMARY_SQL = `
            WHERE e.class_id = s.class_id AND e.unenrolled_at IS NULL) AS enrolled_count,
          (SELECT count(*)::int FROM attendance_records r
            WHERE r.session_id = s.id AND r.status = 'present') AS present_count,
+         (SELECT count(*)::int FROM attendance_records r
+           WHERE r.session_id = s.id AND r.status = 'on_duty') AS on_duty_count,
          (SELECT count(*)::int FROM attendance_records r
            WHERE r.session_id = s.id AND r.status = 'absent') AS absent_count
     FROM attendance_sessions s
@@ -191,8 +198,12 @@ function mapSessionSummary(row: DbSessionSummaryRow): AttendanceSessionSummary {
     counts: {
       enrolled: row.enrolled_count,
       present: row.present_count,
+      onDuty: row.on_duty_count,
       absent: row.absent_count,
-      pending: Math.max(0, row.enrolled_count - row.present_count - row.absent_count),
+      pending: Math.max(
+        0,
+        row.enrolled_count - row.present_count - row.on_duty_count - row.absent_count,
+      ),
     },
   };
 }
@@ -510,12 +521,14 @@ export async function insertOtpMark(
 /**
  * Bulk manual mark/correction for every actively enrolled student of the
  * session's class (method 'manual', actor = acting faculty member). Existing
- * records are overwritten, including OTP self-marks, just like single
- * corrections. Idempotent per status; returns how many records were written.
+ * records are overwritten, including OTP self-marks and OD marks, just like
+ * single corrections. Deliberately limited to present/absent: on-duty is
+ * per-student by nature and would be a footgun as a bulk action. Idempotent
+ * per status; returns how many records were written.
  */
 export async function markAllEnrolledStudents(
   sessionId: string,
-  status: AttendanceStatus,
+  status: 'present' | 'absent',
   actorUserId: string,
   client: PoolClient,
 ): Promise<number> {

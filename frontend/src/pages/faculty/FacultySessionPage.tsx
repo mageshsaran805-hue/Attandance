@@ -24,9 +24,12 @@ import { useFetch } from '../../lib/use-fetch'
 
 type Flash = { tone: 'success' | 'error'; text: string }
 
-function StatusBadge({ status }: { status: 'present' | 'absent' | null }) {
+function StatusBadge({ status }: { status: 'present' | 'absent' | 'on_duty' | null }) {
   if (status === 'present') {
     return <Badge tone="success">Present</Badge>
+  }
+  if (status === 'on_duty') {
+    return <Badge tone="sky">On duty</Badge>
   }
   if (status === 'absent') {
     return <Badge tone="warning">Absent</Badge>
@@ -104,7 +107,10 @@ export default function FacultySessionPage() {
     })
   }
 
-  const markStudent = (student: SessionStudentAttendance, status: 'present' | 'absent') => {
+  const markStudent = (
+    student: SessionStudentAttendance,
+    status: 'present' | 'absent' | 'on_duty',
+  ) => {
     if (!sessionId) {
       return
     }
@@ -194,9 +200,10 @@ export default function FacultySessionPage() {
       {detail.loading && <p className="text-sm text-slate-500">Loading session…</p>}
 
       {session && (
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
           <StatCard label="Enrolled" value={session.counts.enrolled} />
           <StatCard label="Present" value={session.counts.present} />
+          <StatCard label="On duty" value={session.counts.onDuty} hint="Excused" />
           <StatCard label="Absent" value={session.counts.absent} />
           <StatCard
             label="Pending"
@@ -319,6 +326,16 @@ export default function FacultySessionPage() {
                             disabled={mark.busy}
                           >
                             Mark present
+                          </Button>
+                        )}
+                        {student.status !== 'on_duty' && (
+                          <Button
+                            variant="ghost"
+                            className="text-sky-700 hover:bg-sky-50"
+                            onClick={() => markStudent(student, 'on_duty')}
+                            disabled={mark.busy}
+                          >
+                            On duty
                           </Button>
                         )}
                         {student.status !== 'absent' && (

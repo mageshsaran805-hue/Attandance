@@ -5,6 +5,7 @@ import RequireAuth from './components/RequireAuth'
 import { useAuth } from './lib/auth-context'
 import { HOME_PATH_BY_ROLE } from './lib/roles'
 import AdminClassesPage from './pages/admin/AdminClassesPage'
+import AdminCalendarPage from './pages/admin/AdminCalendarPage'
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage'
 import AdminAuditPage from './pages/admin/AdminAuditPage'
 import AdminRegistrationsPage from './pages/admin/AdminRegistrationsPage'
@@ -79,6 +80,14 @@ export default function App() {
             element={
               <RequireAuth roles={['admin']}>
                 <AdminRegistrationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/calendar"
+            element={
+              <RequireAuth roles={['admin']}>
+                <AdminCalendarPage />
               </RequireAuth>
             }
           />

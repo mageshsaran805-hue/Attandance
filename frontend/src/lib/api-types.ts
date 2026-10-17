@@ -128,12 +128,14 @@ export interface AdminOverview {
 // ---------------------------------------------------------------------------
 
 export type SessionStatus = 'open' | 'closed'
-export type AttendanceStatus = 'present' | 'absent'
+export type AttendanceStatus = 'present' | 'absent' | 'on_duty'
 export type MarkMethod = 'otp' | 'manual'
 
 export interface AttendanceCounts {
   enrolled: number
   present: number
+  /** On-duty marks (excused; count as attendance). */
+  onDuty: number
   absent: number
   pending: number
 }
@@ -247,6 +249,8 @@ export interface ReportTotals {
   /** Closed sessions in the range: the basis for percentages. */
   settledSessions: number
   present: number
+  /** On-duty marks (excused; counted as attendance). */
+  onDuty: number
   absent: number
   /** null when the range contains no settled records. */
   percentage: number | null
@@ -257,6 +261,7 @@ export interface ReportSessionEntry {
   sessionDate: string
   status: SessionStatus
   present: number
+  onDuty: number
   absent: number
   pending: number
 }
@@ -267,6 +272,7 @@ export interface ReportStudentEntry {
   email: string
   isActive: boolean
   present: number
+  onDuty: number
   absent: number
   percentage: number | null
 }
@@ -422,4 +428,20 @@ export interface RegistrationReviewResponse {
   approved?: number
   rejected?: number
   failed: number
+}
+
+// ---------------------------------------------------------------------------
+// College calendar: administrator-managed non-working days (holidays)
+// ---------------------------------------------------------------------------
+
+export interface NonWorkingDay {
+  id: string
+  /** YYYY-MM-DD calendar date in the college timezone. */
+  day: string
+  label: string
+  createdAt: string
+}
+
+export interface NonWorkingDaysResponse {
+  nonWorkingDays: NonWorkingDay[]
 }

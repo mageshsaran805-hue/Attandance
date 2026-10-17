@@ -7,12 +7,13 @@ import { getDepartmentById } from './departments.js';
 /**
  * Attendance reporting queries (Phase 5).
  *
- * Percentage convention: only closed sessions count toward present/absent
- * totals. Sessions that are still open appear in listings with their pending
- * count, but are excluded from percentages so the session that is running
- * right now can never drag a percentage down. A percentage is
- * present / (present + absent) rounded to one decimal, or null when the range
- * contains no settled records at all.
+ * Percentage convention: only closed sessions count toward present/on-duty/
+ * absent totals. Sessions that are still open appear in listings with their
+ * pending count, but are excluded from percentages so the session that is
+ * running right now can never drag a percentage down. On-duty (OD) marks are
+ * excused attendance: they count with present marks, so a percentage is
+ * (present + on_duty) / (present + on_duty + absent) rounded to one decimal,
+ * or null when the range contains no settled records at all.
  */
 
 export interface ReportTotals {
@@ -21,6 +22,8 @@ export interface ReportTotals {
   /** Closed sessions in the range: the ones percentages are based on. */
   settledSessions: number;
   present: number;
+  /** On-duty marks (excused; counted as attendance, see percentage). */
+  onDuty: number;
   absent: number;
   percentage: number | null;
 }
@@ -30,6 +33,7 @@ export interface ReportSessionEntry {
   sessionDate: string;
   status: SessionStatus;
   present: number;
+  onDuty: number;
   absent: number;
   /** Actively enrolled students without a record (only meaningful while open). */
   pending: number;
@@ -41,6 +45,7 @@ export interface ReportStudentEntry {
   email: string;
   isActive: boolean;
   present: number;
+  onDuty: number;
   absent: number;
   percentage: number | null;
 }
@@ -112,19 +117,20 @@ export interface StudentHistoryReport {
   sessions: StudentHistoryEntry[];
 }
 
-/** present / (present + absent) as a percentage with one decimal. */
-export function percentageOf(present: number, absent: number): number | null {
-  const total = present + absent;
+/** (present + on_duty) / (present + on_duty + absent) as a percentage, or null. */
+export function percentageOf(present: number, onDuty: number, absent: number): number | null {
+  const total = present + onDuty + absent;
   if (total === 0) {
     return null;
   }
-  return Math.round((present / total) * 1000) / 10;
+  return Math.round(((present + onDuty) / total) * 1000) / 10;
 }
 
 interface SessionTotalsInput {
   sessions: number;
   settledSessions: number;
   present: number;
+  onDuty: number;
   absent: number;
 }
 
@@ -132,14 +138,23 @@ function sumTotals(rows: ReadonlyArray<SessionTotalsInput>): ReportTotals {
   let sessions = 0;
   let settledSessions = 0;
   let present = 0;
+  let onDuty = 0;
   let absent = 0;
   for (const row of rows) {
     sessions += row.sessions;
     settledSessions += row.settledSessions;
     present += row.present;
+    onDuty += row.onDuty;
     absent += row.absent;
   }
-  return { sessions, settledSessions, present, absent, percentage: percentageOf(present, absent) };
+  return {
+    sessions,
+    settledSessions,
+    present,
+    onDuty,
+    absent,
+    percentage: percentageOf(present, onDuty, absent),
+  };
 }
 
 interface DbSessionRow {
@@ -147,6 +162,7 @@ interface DbSessionRow {
   session_date: string;
   status: SessionStatus;
   present: number;
+  on_duty: number;
   absent: number;
   enrolled: number;
 }
@@ -157,6 +173,7 @@ interface DbStudentRow {
   email: string;
   is_active: boolean;
   present: number;
+  on_duty: number;
   absent: number;
 }
 
@@ -168,6 +185,7 @@ interface DbDepartmentClassRow {
   sessions: number;
   settled_sessions: number;
   present: number;
+  on_duty: number;
   absent: number;
 }
 
@@ -187,6 +205,7 @@ interface DbSystemClassRow {
   sessions: number;
   settled_sessions: number;
   present: number;
+  on_duty: number;
   absent: number;
 }
 
@@ -207,6 +226,8 @@ const CLASS_SESSIONS_SQL = `
          s.status,
          (SELECT count(*)::int FROM attendance_records r
            WHERE r.session_id = s.id AND r.status = 'present') AS present,
+         (SELECT count(*)::int FROM attendance_records r
+           WHERE r.session_id = s.id AND r.status = 'on_duty') AS on_duty,
          (SELECT count(*)::int FROM attendance_records r
            WHERE r.session_id = s.id AND r.status = 'absent') AS absent,
          (SELECT count(*)::int FROM enrollments e
@@ -239,6 +260,7 @@ const CLASS_STUDENTS_SQL = `
   )
   SELECT u.id AS student_user_id, u.full_name, u.email, u.is_active,
          count(settled.status) FILTER (WHERE settled.status = 'present')::int AS present,
+         count(settled.status) FILTER (WHERE settled.status = 'on_duty')::int AS on_duty,
          count(settled.status) FILTER (WHERE settled.status = 'absent')::int AS absent
     FROM users u
     JOIN relevant_students rs ON rs.student_user_id = u.id
@@ -255,6 +277,7 @@ const CLASS_AGGREGATES_SQL = `
          count(DISTINCT s.id) AS sessions,
          count(DISTINCT s.id) FILTER (WHERE s.status = 'closed') AS settled_sessions,
          count(r.id) FILTER (WHERE s.status = 'closed' AND r.status = 'present') AS present,
+         count(r.id) FILTER (WHERE s.status = 'closed' AND r.status = 'on_duty') AS on_duty,
          count(r.id) FILTER (WHERE s.status = 'closed' AND r.status = 'absent') AS absent
     FROM attendance_sessions s
     LEFT JOIN attendance_records r ON r.session_id = s.id
@@ -268,6 +291,7 @@ const DEPARTMENT_CLASSES_SQL = `
          COALESCE(a.sessions, 0)::int AS sessions,
          COALESCE(a.settled_sessions, 0)::int AS settled_sessions,
          COALESCE(a.present, 0)::int AS present,
+         COALESCE(a.on_duty, 0)::int AS on_duty,
          COALESCE(a.absent, 0)::int AS absent
     FROM classes c
     LEFT JOIN (${CLASS_AGGREGATES_SQL}) a ON a.class_id = c.id
@@ -283,6 +307,7 @@ const SYSTEM_DEPARTMENTS_SQL = `
          COALESCE(a.sessions, 0)::int AS sessions,
          COALESCE(a.settled_sessions, 0)::int AS settled_sessions,
          COALESCE(a.present, 0)::int AS present,
+         COALESCE(a.on_duty, 0)::int AS on_duty,
          COALESCE(a.absent, 0)::int AS absent
     FROM departments d
     LEFT JOIN (
@@ -290,6 +315,7 @@ const SYSTEM_DEPARTMENTS_SQL = `
              count(DISTINCT s.id) AS sessions,
              count(DISTINCT s.id) FILTER (WHERE s.status = 'closed') AS settled_sessions,
              count(r.id) FILTER (WHERE s.status = 'closed' AND r.status = 'present') AS present,
+             count(r.id) FILTER (WHERE s.status = 'closed' AND r.status = 'on_duty') AS on_duty,
              count(r.id) FILTER (WHERE s.status = 'closed' AND r.status = 'absent') AS absent
         FROM attendance_sessions s
         JOIN classes c ON c.id = s.class_id
@@ -307,6 +333,7 @@ const SYSTEM_CLASSES_SQL = `
          COALESCE(a.sessions, 0)::int AS sessions,
          COALESCE(a.settled_sessions, 0)::int AS settled_sessions,
          COALESCE(a.present, 0)::int AS present,
+         COALESCE(a.on_duty, 0)::int AS on_duty,
          COALESCE(a.absent, 0)::int AS absent
     FROM classes c
     JOIN departments d ON d.id = c.department_id
@@ -359,8 +386,9 @@ export async function getClassReport(
     email: row.email,
     isActive: row.is_active,
     present: row.present,
+    onDuty: row.on_duty,
     absent: row.absent,
-    percentage: percentageOf(row.present, row.absent),
+    percentage: percentageOf(row.present, row.on_duty, row.absent),
   }));
 
   const sessions: ReportSessionEntry[] = sessionResult.rows.map((row) => ({
@@ -368,11 +396,13 @@ export async function getClassReport(
     sessionDate: row.session_date,
     status: row.status,
     present: row.present,
+    onDuty: row.on_duty,
     absent: row.absent,
-    pending: Math.max(0, row.enrolled - row.present - row.absent),
+    pending: Math.max(0, row.enrolled - row.present - row.on_duty - row.absent),
   }));
 
   const present = students.reduce((sum, student) => sum + student.present, 0);
+  const onDuty = students.reduce((sum, student) => sum + student.onDuty, 0);
   const absent = students.reduce((sum, student) => sum + student.absent, 0);
 
   return {
@@ -383,8 +413,9 @@ export async function getClassReport(
       sessions: sessions.length,
       settledSessions: sessions.filter((session) => session.status === 'closed').length,
       present,
+      onDuty,
       absent,
-      percentage: percentageOf(present, absent),
+      percentage: percentageOf(present, onDuty, absent),
     },
     students,
     sessions,
@@ -415,8 +446,9 @@ export async function getDepartmentReport(
     sessions: row.sessions,
     settledSessions: row.settled_sessions,
     present: row.present,
+    onDuty: row.on_duty,
     absent: row.absent,
-    percentage: percentageOf(row.present, row.absent),
+    percentage: percentageOf(row.present, row.on_duty, row.absent),
   }));
 
   return {
@@ -444,8 +476,9 @@ export async function getSystemReport(from: string, to: string): Promise<SystemR
     sessions: row.sessions,
     settledSessions: row.settled_sessions,
     present: row.present,
+    onDuty: row.on_duty,
     absent: row.absent,
-    percentage: percentageOf(row.present, row.absent),
+    percentage: percentageOf(row.present, row.on_duty, row.absent),
   }));
 
   const classes: SystemReportClassEntry[] = classResult.rows.map((row) => ({
@@ -457,8 +490,9 @@ export async function getSystemReport(from: string, to: string): Promise<SystemR
     sessions: row.sessions,
     settledSessions: row.settled_sessions,
     present: row.present,
+    onDuty: row.on_duty,
     absent: row.absent,
-    percentage: percentageOf(row.present, row.absent),
+    percentage: percentageOf(row.present, row.on_duty, row.absent),
   }));
 
   return { from, to, totals: sumTotals(departments), departments, classes };
@@ -488,6 +522,7 @@ export async function getStudentHistory(
   }));
 
   let present = 0;
+  let onDuty = 0;
   let absent = 0;
   let settledSessions = 0;
   for (const session of sessions) {
@@ -497,6 +532,9 @@ export async function getStudentHistory(
     settledSessions += 1;
     if (session.status === 'present') {
       present += 1;
+    }
+    if (session.status === 'on_duty') {
+      onDuty += 1;
     }
     if (session.status === 'absent') {
       absent += 1;
@@ -510,8 +548,9 @@ export async function getStudentHistory(
       sessions: sessions.length,
       settledSessions,
       present,
+      onDuty,
       absent,
-      percentage: percentageOf(present, absent),
+      percentage: percentageOf(present, onDuty, absent),
     },
     sessions,
   };

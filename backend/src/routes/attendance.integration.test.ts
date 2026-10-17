@@ -105,6 +105,7 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
 
   // Shared state across the sequential scenarios.
   let sessionId = '';
+  let yesterdaySessionId = '';
   let otp1 = '';
   let otp3 = '';
 
@@ -227,7 +228,13 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     expect(opened.body.session.status).toBe('open');
     expect(opened.body.session.sessionDate).toBe(todayInTimeZone());
     expect(opened.body.session.otpActive).toBe(true);
-    expect(opened.body.session.counts).toEqual({ enrolled: 4, present: 0, absent: 0, pending: 4 });
+    expect(opened.body.session.counts).toEqual({
+      enrolled: 4,
+      present: 0,
+      onDuty: 0,
+      absent: 0,
+      pending: 4,
+    });
     // The raw OTP is returned once; the database only keeps the HMAC hash.
     expect(opened.body.session).not.toHaveProperty('otp');
 
@@ -381,6 +388,7 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     );
     expect(staleDate.status).toBe(409);
     expect(staleDate.body.error).toMatch(/not open for marking today/);
+    yesterdaySessionId = yesterday.rows[0]?.id ?? '';
   });
 
   it('manual marks and corrections keep an audit trail', async () => {
@@ -440,7 +448,13 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     expect(closed.status).toBe(200);
     expect(closed.body.session.status).toBe('closed');
     expect(closed.body.absentAdded).toBe(1);
-    expect(closed.body.session.counts).toEqual({ enrolled: 4, present: 3, absent: 1, pending: 0 });
+    expect(closed.body.session.counts).toEqual({
+      enrolled: 4,
+      present: 3,
+      onDuty: 0,
+      absent: 1,
+      pending: 0,
+    });
     expect(closed.body.session.closedByName).toBe('IT Faculty One');
 
     const closeAgain = await faculty1.post(`/api/faculty/sessions/${sessionId}/close`);
@@ -473,6 +487,7 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     expect(afterCorrection.body.session.counts).toEqual({
       enrolled: 4,
       present: 4,
+      onDuty: 0,
       absent: 0,
       pending: 0,
     });
@@ -505,6 +520,7 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     expect(afterAbsent.body.session.counts).toEqual({
       enrolled: 4,
       present: 0,
+      onDuty: 0,
       absent: 4,
       pending: 0,
     });
@@ -524,6 +540,7 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     expect(afterPresent.body.session.counts).toEqual({
       enrolled: 4,
       present: 4,
+      onDuty: 0,
       absent: 0,
       pending: 0,
     });
@@ -541,6 +558,49 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     expect(audit.rows[0]?.new_value.status).toBe('absent');
     expect(audit.rows[0]?.new_value.count).toBe(4);
     expect(audit.rows[1]?.new_value.status).toBe('present');
+  });
+
+  it('supports faculty-only on-duty marks and keeps them through closing', async () => {
+    const faculty1 = await loginAs(faculty1Email);
+
+    // The older still-open session is the cleanest place to exercise OD:
+    // student 1 is on official duty (excused) and never used the OTP.
+    expect(yesterdaySessionId).not.toBe('');
+    const marked = await faculty1.post(`/api/faculty/sessions/${yesterdaySessionId}/mark`, {
+      studentUserId: student1Id,
+      status: 'on_duty',
+    });
+    expect(marked.status).toBe(200);
+    expect(marked.body.record.status).toBe('on_duty');
+    expect(marked.body.record.method).toBe('manual');
+    expect(marked.body.record.markedByUserId).toBe(faculty1Id);
+
+    // Only the known statuses are accepted.
+    const invalid = await faculty1.post(`/api/faculty/sessions/${yesterdaySessionId}/mark`, {
+      studentUserId: student1Id,
+      status: 'excused',
+    });
+    expect(invalid.status).toBe(400);
+
+    // Closing fills the still-pending students with absent; the OD record is
+    // settled attendance and must survive untouched.
+    const closed = await faculty1.post(`/api/faculty/sessions/${yesterdaySessionId}/close`);
+    expect(closed.status).toBe(200);
+    expect(closed.body.absentAdded).toBe(3);
+    expect(closed.body.session.counts).toEqual({
+      enrolled: 4,
+      present: 0,
+      onDuty: 1,
+      absent: 3,
+      pending: 0,
+    });
+
+    const detail = await faculty1.get(`/api/faculty/sessions/${yesterdaySessionId}`);
+    const row = detail.body.students.find(
+      (student: { studentUserId: string }) => student.studentUserId === student1Id,
+    );
+    expect(row.status).toBe('on_duty');
+    expect(row.method).toBe('manual');
   });
 
   it('never stores OTP values or hashes in the audit trail', async () => {

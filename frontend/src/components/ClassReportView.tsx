@@ -8,23 +8,25 @@ import { Table, Td, Th } from './ui/Table'
 /**
  * Shared class attendance report: totals, per-student percentages and the
  * session list. Only closed sessions count toward percentages; open sessions
- * are listed with their pending count and excluded.
+ * are listed with their pending count and excluded. On-duty marks are excused
+ * and count with present marks in the percentage.
  */
 export default function ClassReportView({ report }: { report: ClassReport }) {
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard
           label="Settled sessions"
           value={report.totals.settledSessions}
           hint={`${report.totals.sessions} session${report.totals.sessions === 1 ? '' : 's'} in range`}
         />
         <StatCard label="Present marks" value={report.totals.present} />
+        <StatCard label="On duty" value={report.totals.onDuty} hint="Excused attendance" />
         <StatCard label="Absent marks" value={report.totals.absent} />
         <StatCard
           label="Attendance"
           value={formatPercent(report.totals.percentage)}
-          hint="Present ÷ settled marks"
+          hint="Present + OD ÷ settled marks"
         />
       </div>
 
@@ -43,6 +45,7 @@ export default function ClassReportView({ report }: { report: ClassReport }) {
             <tr>
               <Th>Student</Th>
               <Th className="text-right">Present</Th>
+              <Th className="text-right">On duty</Th>
               <Th className="text-right">Absent</Th>
               <Th className="text-right">Attendance</Th>
             </tr>
@@ -58,6 +61,7 @@ export default function ClassReportView({ report }: { report: ClassReport }) {
                   <p className="text-xs text-slate-500">{student.email}</p>
                 </Td>
                 <Td className="text-right tabular-nums">{student.present}</Td>
+                <Td className="text-right tabular-nums">{student.onDuty}</Td>
                 <Td className="text-right tabular-nums">{student.absent}</Td>
                 <Td className="text-right font-medium tabular-nums">
                   {formatPercent(student.percentage)}
@@ -84,6 +88,7 @@ export default function ClassReportView({ report }: { report: ClassReport }) {
               <Th>Date</Th>
               <Th>Status</Th>
               <Th className="text-right">Present</Th>
+              <Th className="text-right">On duty</Th>
               <Th className="text-right">Absent</Th>
               <Th className="text-right">Pending</Th>
             </tr>
@@ -102,6 +107,7 @@ export default function ClassReportView({ report }: { report: ClassReport }) {
                   )}
                 </Td>
                 <Td className="text-right tabular-nums">{session.present}</Td>
+                <Td className="text-right tabular-nums">{session.onDuty}</Td>
                 <Td className="text-right tabular-nums">{session.absent}</Td>
                 <Td className="text-right tabular-nums">{session.pending}</Td>
               </tr>
