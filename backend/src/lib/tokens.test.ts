@@ -18,8 +18,12 @@ describe('session tokens (HS256 JWT)', () => {
 
   it('rejects tampered tokens', async () => {
     const token = await issueSessionToken(USER_ID, 3_600);
-    const lastChar = token.slice(-1);
-    const tampered = token.slice(0, -1) + (lastChar === 'A' ? 'B' : 'A');
+    const [header, payload, signature] = token.split('.') as [string, string, string];
+    // Flip the first character of the signature. Every base64url character
+    // except the final one carries six significant bits, so the first
+    // character always changes the decoded signature bytes; the final
+    // character only carries four, so flipping it can decode identically.
+    const tampered = `${header}.${payload}.${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`;
 
     await expect(verifySessionToken(tampered)).resolves.toBeNull();
   });
