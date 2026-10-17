@@ -1,7 +1,5 @@
 import { Router } from 'express';
-import pg from 'pg';
 import { z } from 'zod';
-import { getPool } from '../db/pool.js';
 import { withTransaction } from '../db/transactions.js';
 import { ApiError } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
@@ -162,97 +160,6 @@ adminRouter.get('/admin/overview', async (_req, res) => {
     countPendingRegistrations(),
   ]);
   res.json({ counts: { departments, classes, accounts, pendingRegistrations } });
-});
-
-/**
- * TEMPORARY DIAGNOSTIC — deployed only to investigate the production issue
- * where every handler that runs two or more concurrent pool queries fails.
- * Remove this route (and the pg/getPool imports if unused) after the fix.
- */
-adminRouter.get('/admin/db-diagnostics', async (_req, res) => {
-  const dsn = process.env.DATABASE_URL ?? '';
-  const out: Record<string, unknown> = { node: process.version };
-
-  try {
-    const parsed = new URL(dsn);
-    out.dsn = {
-      protocol: parsed.protocol,
-      host: parsed.hostname,
-      port: parsed.port,
-      user: parsed.username,
-      database: parsed.pathname.slice(1),
-      sslmode: parsed.searchParams.get('sslmode'),
-      sslrootcert: parsed.searchParams.get('sslrootcert') ? '<set>' : null,
-      extraParams: [...parsed.searchParams.keys()].filter(
-        (k) => k !== 'sslmode' && k !== 'sslrootcert',
-      ),
-    };
-  } catch {
-    out.dsn = 'unparseable';
-  }
-
-  const pool = getPool();
-  const poolState = (): Record<string, unknown> => ({
-    max: pool.options.max,
-    connectionTimeoutMillis: pool.options.connectionTimeoutMillis,
-    idleTimeoutMillis: pool.options.idleTimeoutMillis,
-    total: pool.totalCount,
-    idle: pool.idleCount,
-    waiting: pool.waitingCount,
-  });
-  const summarize = (
-    result: PromiseSettledResult<{ rows: unknown[] }>,
-  ): Record<string, unknown> =>
-    result.status === 'fulfilled'
-      ? { ok: true, rows: result.value.rows }
-      : {
-          ok: false,
-          code: (result.reason as { code?: string } | null)?.code ?? null,
-          message: String((result.reason as Error)?.message ?? result.reason),
-          stack: String((result.reason as Error)?.stack ?? '')
-            .split('\n')
-            .slice(0, 5),
-        };
-
-  out.poolBefore = poolState();
-
-  const startedTwo = Date.now();
-  const two = await Promise.allSettled([pool.query('SELECT 1 AS a'), pool.query('SELECT 2 AS b')]);
-  out.twoConcurrent = { ms: Date.now() - startedTwo, results: two.map(summarize) };
-
-  const startedFour = Date.now();
-  const four = await Promise.allSettled([
-    pool.query('SELECT 1 AS n'),
-    pool.query('SELECT 2 AS n'),
-    pool.query('SELECT 3 AS n'),
-    pool.query('SELECT 4 AS n'),
-  ]);
-  out.fourConcurrent = { ms: Date.now() - startedFour, results: four.map(summarize) };
-
-  out.poolAfter = poolState();
-
-  const fresh = new pg.Client({ connectionString: dsn, connectionTimeoutMillis: 10_000 });
-  const startedFresh = Date.now();
-  try {
-    await fresh.connect();
-    const result = await fresh.query('SELECT 5 AS c');
-    out.freshClient = { ok: true, ms: Date.now() - startedFresh, rows: result.rows };
-  } catch (error) {
-    out.freshClient = {
-      ok: false,
-      ms: Date.now() - startedFresh,
-      code: (error as { code?: string } | null)?.code ?? null,
-      message: String((error as Error)?.message ?? error),
-      stack: String((error as Error)?.stack ?? '')
-        .split('\n')
-        .slice(0, 5),
-    };
-  } finally {
-    await fresh.end().catch(() => {});
-  }
-
-  out.poolFinal = poolState();
-  res.json(out);
 });
 
 /** GET /api/admin/departments — departments with their HOD and usage counts. */
