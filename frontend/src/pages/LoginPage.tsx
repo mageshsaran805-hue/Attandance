@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router'
 import HealthIndicator from '../components/HealthIndicator'
 import LoadingScreen from '../components/LoadingScreen'
+import { PasswordField } from '../components/ui/FormField'
 import { useAuth } from '../lib/auth-context'
 import { ApiRequestError } from '../lib/api'
 import { HOME_PATH_BY_ROLE } from '../lib/roles'
@@ -78,20 +79,14 @@ export default function LoginPage() {
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-2 focus:outline-offset-0 focus:outline-indigo-600"
-              />
-            </div>
+            <PasswordField
+              id="password"
+              label="Password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
 
             {error && (
               <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

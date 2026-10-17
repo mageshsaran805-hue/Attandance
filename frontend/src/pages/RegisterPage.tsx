@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router'
 import HealthIndicator from '../components/HealthIndicator'
 import LoadingScreen from '../components/LoadingScreen'
 import Alert from '../components/ui/Alert'
-import { SelectField, TextField } from '../components/ui/FormField'
+import { PasswordField, SelectField, TextField } from '../components/ui/FormField'
 import { apiFetch } from '../lib/api'
 import type { RegistrationChoicesResponse, SubmittedRegistration } from '../lib/api-types'
 import { useAuth } from '../lib/auth-context'
@@ -243,10 +243,9 @@ export default function RegisterPage() {
                   ))}
                 </SelectField>
 
-                <TextField
+                <PasswordField
                   label="Password"
                   id="register-password"
-                  type="password"
                   autoComplete="new-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -254,10 +253,9 @@ export default function RegisterPage() {
                   error={action.issues.password}
                 />
 
-                <TextField
+                <PasswordField
                   label="Confirm password"
                   id="register-confirm"
-                  type="password"
                   autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}

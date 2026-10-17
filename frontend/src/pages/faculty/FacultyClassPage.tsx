@@ -5,7 +5,7 @@ import Alert from '../../components/ui/Alert'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
-import { TextField } from '../../components/ui/FormField'
+import { PasswordField, TextField } from '../../components/ui/FormField'
 import Modal from '../../components/ui/Modal'
 import PageHeader from '../../components/ui/PageHeader'
 import { Table, Td, Th } from '../../components/ui/Table'
@@ -499,10 +499,9 @@ export default function FacultyClassPage() {
             onChange={(event) => setAddPhone(event.target.value)}
             error={add.issues.phone}
           />
-          <TextField
+          <PasswordField
             id="student-password"
             label="Initial password"
-            type="password"
             value={addPassword}
             onChange={(event) => setAddPassword(event.target.value)}
             error={add.issues.password}
@@ -621,10 +620,9 @@ export default function FacultyClassPage() {
             submitReset()
           }}
         >
-          <TextField
+          <PasswordField
             id="student-new-password"
             label="New password"
-            type="password"
             value={resetPassword}
             onChange={(event) => setResetPassword(event.target.value)}
             error={reset.issues.newPassword}

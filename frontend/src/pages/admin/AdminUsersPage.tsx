@@ -5,7 +5,7 @@ import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
-import { SelectField, TextField } from '../../components/ui/FormField'
+import { PasswordField, SelectField, TextField } from '../../components/ui/FormField'
 import Modal from '../../components/ui/Modal'
 import PageHeader from '../../components/ui/PageHeader'
 import { Table, Td, Th } from '../../components/ui/Table'
@@ -431,10 +431,9 @@ export default function AdminUsersPage() {
             <option value="hod">Head of Department</option>
             <option value="admin">Administrator</option>
           </SelectField>
-          <TextField
+          <PasswordField
             id="account-password"
             label="Initial password"
-            type="password"
             value={createPassword}
             onChange={(event) => setCreatePassword(event.target.value)}
             error={create.issues.password}
@@ -547,10 +546,9 @@ export default function AdminUsersPage() {
             submitReset()
           }}
         >
-          <TextField
+          <PasswordField
             id="account-new-password"
             label="New password"
-            type="password"
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
             error={resetAction.issues.newPassword}
