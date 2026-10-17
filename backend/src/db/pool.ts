@@ -42,7 +42,9 @@ export function getPool(): pg.Pool {
 
 export type DatabaseHealth =
   | { status: 'ok'; latencyMs: number }
-  | { status: 'down' }
+  // TEMP (production incident): `detail` surface the connection failure
+  // reason on /api/health while diagnosing Render -> Supabase pooler errors.
+  | { status: 'down'; detail?: string }
   | { status: 'not_configured' };
 
 /**
@@ -60,7 +62,10 @@ export async function checkDatabase(): Promise<DatabaseHealth> {
     return { status: 'ok', latencyMs: Date.now() - startedAt };
   } catch (error) {
     console.error('[db] health check failed:', error instanceof Error ? error.message : error);
-    return { status: 'down' };
+    // TEMP (production incident): surface the failure reason on /api/health.
+    const code = (error as { code?: string | number }).code;
+    const message = error instanceof Error ? error.message : String(error);
+    return { status: 'down', detail: code ? `[${String(code)}] ${message}` : message };
   }
 }
 
