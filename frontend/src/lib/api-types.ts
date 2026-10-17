@@ -204,6 +204,11 @@ export interface ManualMarkResponse {
   record: AttendanceRecord
 }
 
+export interface MarkAllResponse {
+  marked: number
+  status: 'present' | 'absent'
+}
+
 export interface StudentMarkResponse {
   record: AttendanceRecord
 }

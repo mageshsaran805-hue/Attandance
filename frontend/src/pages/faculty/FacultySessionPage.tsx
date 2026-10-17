@@ -13,6 +13,7 @@ import type {
   CloseSessionResponse,
   FacultySessionResponse,
   ManualMarkResponse,
+  MarkAllResponse,
   RegenerateOtpResponse,
   SessionStudentAttendance,
 } from '../../lib/api-types'
@@ -51,9 +52,11 @@ export default function FacultySessionPage() {
   const [otp, setOtp] = useState<string | null>(() => (sessionId ? readSessionOtp(sessionId) : null))
   const [regenerateOpen, setRegenerateOpen] = useState(false)
   const [closeOpen, setCloseOpen] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<'present' | 'absent' | null>(null)
   const regenerate = useAction()
   const close = useAction()
   const mark = useAction()
+  const bulk = useAction()
 
   useEffect(() => {
     if (session?.status !== 'open') {
@@ -109,6 +112,27 @@ export default function FacultySessionPage() {
       await apiFetch<ManualMarkResponse>(`/api/faculty/sessions/${sessionId}/mark`, {
         method: 'POST',
         body: { studentUserId: student.studentUserId, status },
+      })
+      reload()
+    })
+  }
+
+  const markAll = () => {
+    if (!sessionId || bulkStatus === null) {
+      return
+    }
+    const status = bulkStatus
+    void bulk.run(async () => {
+      const result = await apiFetch<MarkAllResponse>(`/api/faculty/sessions/${sessionId}/mark-all`, {
+        method: 'POST',
+        body: { status },
+      })
+      setBulkStatus(null)
+      setFlash({
+        tone: 'success',
+        text: `All ${result.marked} enrolled ${
+          result.marked === 1 ? 'student' : 'students'
+        } marked ${result.status}.`,
       })
       reload()
     })
@@ -215,9 +239,36 @@ export default function FacultySessionPage() {
 
       {detail.data && (
         <>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Students
-          </h3>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Students
+            </h3>
+            {detail.data.students.length > 0 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    bulk.reset()
+                    setBulkStatus('present')
+                  }}
+                  disabled={bulk.busy || mark.busy}
+                >
+                  Mark all present
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-amber-700 hover:bg-amber-50"
+                  onClick={() => {
+                    bulk.reset()
+                    setBulkStatus('absent')
+                  }}
+                  disabled={bulk.busy || mark.busy}
+                >
+                  Mark all absent
+                </Button>
+              </div>
+            )}
+          </div>
           {mark.error && <Alert className="mb-3">{mark.error}</Alert>}
           {detail.data.students.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
@@ -311,6 +362,22 @@ export default function FacultySessionPage() {
         danger
         busy={close.busy}
         error={close.error}
+      />
+
+      <ConfirmDialog
+        open={bulkStatus !== null}
+        onClose={() => setBulkStatus(null)}
+        onConfirm={markAll}
+        title={
+          bulkStatus === 'absent' ? 'Mark every student absent?' : 'Mark every student present?'
+        }
+        message={`All ${session?.counts.enrolled ?? 0} enrolled students are set to ${
+          bulkStatus === 'absent' ? 'absent' : 'present'
+        }. Existing marks — including OTP self-marks — are overwritten; you can still correct individual students afterwards.`}
+        confirmLabel={bulkStatus === 'absent' ? 'Mark all absent' : 'Mark all present'}
+        danger={bulkStatus === 'absent'}
+        busy={bulk.busy}
+        error={bulk.error}
       />
     </AppShell>
   )
