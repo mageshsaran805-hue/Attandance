@@ -507,6 +507,31 @@ export async function insertOtpMark(
   return row ? mapRecord(row) : null;
 }
 
+/**
+ * Bulk manual mark/correction for every actively enrolled student of the
+ * session's class (method 'manual', actor = acting faculty member). Existing
+ * records are overwritten, including OTP self-marks, just like single
+ * corrections. Idempotent per status; returns how many records were written.
+ */
+export async function markAllEnrolledStudents(
+  sessionId: string,
+  status: AttendanceStatus,
+  actorUserId: string,
+  client: PoolClient,
+): Promise<number> {
+  const { rowCount } = await client.query(
+    `INSERT INTO attendance_records (session_id, student_user_id, status, method, marked_by)
+     SELECT $1, e.student_user_id, $2, 'manual', $3
+       FROM attendance_sessions s
+       JOIN enrollments e ON e.class_id = s.class_id AND e.unenrolled_at IS NULL
+      WHERE s.id = $1
+     ON CONFLICT (session_id, student_user_id)
+     DO UPDATE SET status = EXCLUDED.status, method = 'manual', marked_by = EXCLUDED.marked_by`,
+    [sessionId, status, actorUserId],
+  );
+  return rowCount ?? 0;
+}
+
 /** Manual mark or correction; always records the acting user. */
 export async function upsertManualMark(
   input: {

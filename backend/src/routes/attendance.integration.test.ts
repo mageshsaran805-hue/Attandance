@@ -478,6 +478,71 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
     });
   });
 
+  it('bulk marks the whole roster and overwrites self-marks, open or closed', async () => {
+    const faculty1 = await loginAs(faculty1Email);
+    const faculty2 = await loginAs(faculty2Email);
+
+    // Out of scope: another faculty member cannot bulk-mark this session.
+    expect(
+      (await faculty2.post(`/api/faculty/sessions/${sessionId}/mark-all`, { status: 'present' }))
+        .status,
+    ).toBe(404);
+    // Validation: only present/absent are accepted.
+    expect(
+      (await faculty1.post(`/api/faculty/sessions/${sessionId}/mark-all`, { status: 'maybe' }))
+        .status,
+    ).toBe(400);
+
+    // The session is closed by now; bulk corrections stay possible anytime.
+    const allAbsent = await faculty1.post(`/api/faculty/sessions/${sessionId}/mark-all`, {
+      status: 'absent',
+    });
+    expect(allAbsent.status).toBe(200);
+    expect(allAbsent.body).toEqual({ marked: 4, status: 'absent' });
+
+    // Student 1's OTP self-mark is overwritten by the bulk absent.
+    const afterAbsent = await faculty1.get(`/api/faculty/sessions/${sessionId}`);
+    expect(afterAbsent.body.session.counts).toEqual({
+      enrolled: 4,
+      present: 0,
+      absent: 4,
+      pending: 0,
+    });
+    const overwritten = afterAbsent.body.students.find(
+      (student: { studentUserId: string }) => student.studentUserId === student1Id,
+    );
+    expect(overwritten.status).toBe('absent');
+    expect(overwritten.method).toBe('manual');
+
+    const allPresent = await faculty1.post(`/api/faculty/sessions/${sessionId}/mark-all`, {
+      status: 'present',
+    });
+    expect(allPresent.status).toBe(200);
+    expect(allPresent.body.marked).toBe(4);
+
+    const afterPresent = await faculty1.get(`/api/faculty/sessions/${sessionId}`);
+    expect(afterPresent.body.session.counts).toEqual({
+      enrolled: 4,
+      present: 4,
+      absent: 0,
+      pending: 0,
+    });
+
+    // One audit entry per bulk action records the status and how many
+    // records were written.
+    const pool = getPool();
+    const audit = await pool.query<{ new_value: { status?: string; count?: number } }>(
+      `SELECT new_value FROM audit_log
+        WHERE action = 'session.mark_all' AND entity_id = $1
+        ORDER BY id`,
+      [sessionId],
+    );
+    expect(audit.rows).toHaveLength(2);
+    expect(audit.rows[0]?.new_value.status).toBe('absent');
+    expect(audit.rows[0]?.new_value.count).toBe(4);
+    expect(audit.rows[1]?.new_value.status).toBe('present');
+  });
+
   it('never stores OTP values or hashes in the audit trail', async () => {
     const pool = getPool();
     const codes = [otp1, otp3].filter((code) => code !== '');
@@ -502,6 +567,7 @@ describe.skipIf(!enabled)('attendance integration (real database)', () => {
       'session.open',
       'session.otp_regenerate',
       'session.manual_mark',
+      'session.mark_all',
       'session.close',
       'session.otp_mark',
     ]) {

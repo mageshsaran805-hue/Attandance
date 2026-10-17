@@ -21,6 +21,7 @@ import {
   insertOtpMark,
   listRecentSessionsForClass,
   listSessionStudents,
+  markAllEnrolledStudents,
   materializeAbsentStudents,
   openSession,
   recordOtpAttempt,
@@ -74,6 +75,10 @@ const sessionParamSchema = z.object({ sessionId: z.uuid('must be a valid session
 
 const manualMarkSchema = z.object({
   studentUserId: z.uuid('must be a valid student id'),
+  status: z.enum(['present', 'absent'], 'must be present or absent'),
+});
+
+const markAllSchema = z.object({
   status: z.enum(['present', 'absent'], 'must be present or absent'),
 });
 
@@ -273,6 +278,40 @@ attendanceRouter.post(
     });
 
     res.json({ record });
+  },
+);
+
+/** POST /api/faculty/sessions/:sessionId/mark-all — full present/absent in one step. */
+attendanceRouter.post(
+  '/faculty/sessions/:sessionId/mark-all',
+  ...facultyOnly,
+  validateParams(sessionParamSchema),
+  validateBody(markAllSchema),
+  async (req, res) => {
+    const { sessionId } = req.params as { sessionId: string };
+    const { status } = req.body as z.infer<typeof markAllSchema>;
+    const actorUserId = authenticatedUserId(req);
+    const session = await requireFacultySession(actorUserId, sessionId);
+
+    // Open or closed: the whole roster is (re)marked, like a manual
+    // correction applied to everyone who is still actively enrolled.
+    const marked = await withTransaction(async (client) => {
+      const count = await markAllEnrolledStudents(session.id, status, actorUserId, client);
+      await logAudit(
+        {
+          actorUserId,
+          action: 'session.mark_all',
+          entityType: 'attendance_session',
+          entityId: session.id,
+          newValue: { status, count },
+          ip: req.ip ?? null,
+        },
+        client,
+      );
+      return count;
+    });
+
+    res.json({ marked, status });
   },
 );
 
