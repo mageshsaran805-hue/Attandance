@@ -2,9 +2,11 @@
 
 The schema described here is **implemented by migrations
 [`0001_core_schema.sql`](../database/migrations/0001_core_schema.sql)**
-(Phase 2) and
+(Phase 2),
 **[`0002_student_registrations.sql`](../database/migrations/0002_student_registrations.sql)**
-(Phase 6, student self-registration). This document is the design reference
+(Phase 6, student self-registration) and
+**[`0003_student_section.sql`](../database/migrations/0003_student_section.sql)**
+(optional student section). This document is the design reference
 for those migrations and for future ones; keep it in sync when the schema
 changes.
 
@@ -84,6 +86,7 @@ One row per person who can log in, any role.
 | `is_active` | deactivation instead of deletion |
 | `register_number` | nullable (added in 0002); student roll number, unique case-insensitive among non-null values (`users_register_number_key`) |
 | `phone` | nullable (added in 0002); student contact number |
+| `section` | nullable (added in 0003); optional student section/group label (e.g. A, B); informational only — attendance stays per class |
 | `created_at`, `updated_at` | timestamptz |
 
 ### student_registrations (added in 0002)
@@ -97,6 +100,7 @@ row is never deleted (pending → approved/rejected once).
 | `id` | uuid, PK |
 | `full_name`, `email`, `register_number` | submitted details; email/register number are matched case-insensitively |
 | `phone` | nullable |
+| `section` | nullable (added in 0003); optional section the applicant provided, copied to the student account on approval |
 | `class_id` | FK → classes; the class the student chose, enrolled on approval |
 | `password_hash` | Argon2id hash captured at submission; the plaintext password never reaches the database or logs |
 | `status` | enum `registration_status`: `pending`, `approved`, `rejected` |

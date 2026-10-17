@@ -713,6 +713,7 @@ adminRouter.post(
               passwordHash: registration.passwordHash,
               registerNumber: registration.registerNumber,
               phone: registration.phone,
+              section: registration.section,
             },
             client,
           ).catch((error: unknown) =>
@@ -747,6 +748,7 @@ adminRouter.post(
                 classId: registration.classId,
                 email: registration.email,
                 registerNumber: registration.registerNumber,
+                section: registration.section,
               },
               ip: req.ip ?? null,
             },

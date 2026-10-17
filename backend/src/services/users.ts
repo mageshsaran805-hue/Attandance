@@ -71,6 +71,7 @@ export interface AdminUserRow {
   /** Student profile fields; null for staff accounts. */
   registerNumber: string | null;
   phone: string | null;
+  section: string | null;
   createdAt: string;
 }
 
@@ -88,11 +89,12 @@ interface DbAdminUserRow {
   is_active: boolean;
   register_number: string | null;
   phone: string | null;
+  section: string | null;
   created_at: string;
 }
 
 const ADMIN_USER_COLUMNS =
-  'id, email, full_name, role, is_active, register_number, phone, created_at';
+  'id, email, full_name, role, is_active, register_number, phone, section, created_at';
 
 function mapAdminUser(row: DbAdminUserRow): AdminUserRow {
   return {
@@ -103,6 +105,7 @@ function mapAdminUser(row: DbAdminUserRow): AdminUserRow {
     isActive: row.is_active,
     registerNumber: row.register_number,
     phone: row.phone,
+    section: row.section,
     createdAt: row.created_at,
   };
 }
@@ -149,13 +152,14 @@ export async function createUser(
     passwordHash: string;
     registerNumber?: string | null;
     phone?: string | null;
+    section?: string | null;
   },
   client?: Pool | PoolClient,
 ): Promise<AdminUserRow> {
   const db = client ?? getPool();
   const { rows } = await db.query<DbAdminUserRow>(
-    `INSERT INTO users (email, full_name, role, password_hash, register_number, phone)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO users (email, full_name, role, password_hash, register_number, phone, section)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING ${ADMIN_USER_COLUMNS}`,
     [
       input.email,
@@ -164,19 +168,26 @@ export async function createUser(
       input.passwordHash,
       input.registerNumber ?? null,
       input.phone ?? null,
+      input.section ?? null,
     ],
   );
   return mapAdminUser(expectRow(rows[0], 'users: insert'));
 }
 
 /**
- * Updates profile fields. Register number and phone are only changed when a
- * value is provided (COALESCE): clearing them is not supported yet, and
+ * Updates profile fields. Register number, phone and section are only changed
+ * when a value is provided (COALESCE): clearing them is not supported yet, and
  * callers that do not manage them (e.g. admin name/email edits) keep them.
  */
 export async function updateUserProfile(
   id: string,
-  input: { fullName: string; email: string; registerNumber?: string | null; phone?: string | null },
+  input: {
+    fullName: string;
+    email: string;
+    registerNumber?: string | null;
+    phone?: string | null;
+    section?: string | null;
+  },
   client?: Pool | PoolClient,
 ): Promise<AdminUserRow | null> {
   const db = client ?? getPool();
@@ -185,10 +196,18 @@ export async function updateUserProfile(
         SET full_name = $2,
             email = $3,
             register_number = COALESCE($4, register_number),
-            phone = COALESCE($5, phone)
+            phone = COALESCE($5, phone),
+            section = COALESCE($6, section)
       WHERE id = $1
       RETURNING ${ADMIN_USER_COLUMNS}`,
-    [id, input.fullName, input.email, input.registerNumber ?? null, input.phone ?? null],
+    [
+      id,
+      input.fullName,
+      input.email,
+      input.registerNumber ?? null,
+      input.phone ?? null,
+      input.section ?? null,
+    ],
   );
   const row = rows[0];
   return row ? mapAdminUser(row) : null;

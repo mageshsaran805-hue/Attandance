@@ -37,6 +37,13 @@ export const registerNumberSchema = z
   .max(40, 'must be at most 40 characters')
   .regex(/^[A-Za-z0-9/._-]+$/, 'must contain only letters, digits or / . _ -');
 
+export const sectionSchema = z
+  .string()
+  .trim()
+  .min(1, 'must be at least 1 character')
+  .max(10, 'must be at most 10 characters')
+  .regex(/^[A-Za-z0-9 -]+$/, 'must contain only letters, digits, spaces or -');
+
 export const phoneSchema = z
   .string()
   .trim()

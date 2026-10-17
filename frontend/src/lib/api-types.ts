@@ -35,6 +35,7 @@ export interface AdminUser {
   isActive: boolean
   registerNumber: string | null
   phone: string | null
+  section: string | null
   createdAt: string
 }
 
@@ -103,6 +104,7 @@ export interface RosterEntry {
     isActive: boolean
     registerNumber: string | null
     phone: string | null
+    section: string | null
   }
 }
 
@@ -394,6 +396,7 @@ export interface AdminRegistrationEntry {
   email: string
   registerNumber: string
   phone: string | null
+  section: string | null
   status: RegistrationStatus
   submittedAt: string
   reviewedAt: string | null

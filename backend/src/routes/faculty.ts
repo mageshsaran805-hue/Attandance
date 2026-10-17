@@ -4,7 +4,7 @@ import { withTransaction } from '../db/transactions.js';
 import { ApiError } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
 import { throwIfUniqueViolation } from '../lib/pg-errors.js';
-import { emailSchema, fullNameSchema, passwordSchema, phoneSchema, registerNumberSchema } from '../lib/schemas.js';
+import { emailSchema, fullNameSchema, passwordSchema, phoneSchema, registerNumberSchema, sectionSchema } from '../lib/schemas.js';
 import { authenticatedUserId, requireAuth, requireRole } from '../middleware/auth.js';
 import { validateBody, validateParams } from '../middleware/validate.js';
 import { logAudit } from '../services/audit.js';
@@ -52,6 +52,7 @@ const studentCreateSchema = z.object({
   password: passwordSchema,
   registerNumber: registerNumberSchema.optional(),
   phone: phoneSchema.optional(),
+  section: sectionSchema.optional(),
 });
 
 const studentUpdateSchema = z
@@ -60,13 +61,15 @@ const studentUpdateSchema = z
     email: emailSchema.optional(),
     registerNumber: registerNumberSchema.optional(),
     phone: phoneSchema.optional(),
+    section: sectionSchema.optional(),
   })
   .refine(
     (value) =>
       value.fullName !== undefined ||
       value.email !== undefined ||
       value.registerNumber !== undefined ||
-      value.phone !== undefined,
+      value.phone !== undefined ||
+      value.section !== undefined,
     { message: 'provide at least one field to update' },
   );
 
@@ -141,6 +144,7 @@ facultyRouter.post(
           passwordHash,
           registerNumber: input.registerNumber ?? null,
           phone: input.phone ?? null,
+          section: input.section ?? null,
         },
         client,
       ).catch((error: unknown) =>
@@ -157,6 +161,7 @@ facultyRouter.post(
             email: student.email,
             fullName: student.fullName,
             registerNumber: student.registerNumber,
+            section: student.section,
             classId: id,
           },
           ip: req.ip ?? null,
@@ -273,6 +278,7 @@ facultyRouter.patch(
           email: input.email ?? target.email,
           registerNumber: input.registerNumber ?? null,
           phone: input.phone ?? null,
+          section: input.section ?? null,
         },
         client,
       ).catch((error: unknown) =>
@@ -291,11 +297,13 @@ facultyRouter.patch(
             fullName: target.fullName,
             email: target.email,
             registerNumber: target.registerNumber,
+            section: target.section,
           },
           newValue: {
             fullName: row.fullName,
             email: row.email,
             registerNumber: row.registerNumber,
+            section: row.section,
           },
           ip: req.ip ?? null,
         },

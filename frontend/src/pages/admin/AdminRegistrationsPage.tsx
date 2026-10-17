@@ -206,6 +206,7 @@ export default function AdminRegistrationsPage() {
                 <Th>Email</Th>
                 <Th>Register no.</Th>
                 <Th>Phone</Th>
+                <Th>Section</Th>
                 <Th>Class</Th>
                 <Th>Submitted</Th>
                 {pending ? <Th>Actions</Th> : <Th>Reviewed</Th>}
@@ -228,6 +229,7 @@ export default function AdminRegistrationsPage() {
                   <Td className="text-slate-600">{entry.email}</Td>
                   <Td className="text-slate-600">{entry.registerNumber}</Td>
                   <Td className="text-slate-600">{entry.phone ?? '—'}</Td>
+                  <Td className="text-slate-600">{entry.section ?? '—'}</Td>
                   <Td>
                     <div className="text-slate-700">{entry.class.name}</div>
                     <div className="text-xs text-slate-400">

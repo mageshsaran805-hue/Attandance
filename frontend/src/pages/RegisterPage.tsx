@@ -26,6 +26,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [registerNumber, setRegisterNumber] = useState('')
   const [phone, setPhone] = useState('')
+  const [section, setSection] = useState('')
   const [departmentId, setDepartmentId] = useState('')
   const [classId, setClassId] = useState('')
   const [password, setPassword] = useState('')
@@ -74,6 +75,7 @@ export default function RegisterPage() {
           email: email.trim(),
           registerNumber: registerNumber.trim(),
           ...(phone.trim() === '' ? {} : { phone: phone.trim() }),
+          ...(section.trim() === '' ? {} : { section: section.trim() }),
           classId,
           password,
         },
@@ -242,6 +244,15 @@ export default function RegisterPage() {
                     </option>
                   ))}
                 </SelectField>
+
+                <TextField
+                  label="Section (optional)"
+                  id="register-section"
+                  value={section}
+                  onChange={(event) => setSection(event.target.value)}
+                  hint="e.g. A, B or A1 — leave blank if you are not sure yet."
+                  error={action.issues.section}
+                />
 
                 <PasswordField
                   label="Password"

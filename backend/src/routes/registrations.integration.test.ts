@@ -94,6 +94,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: string;
       registerNumber: string;
       phone?: string;
+      section?: string;
       classId?: string;
     },
   ) {
@@ -102,6 +103,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: input.email,
       registerNumber: input.registerNumber,
       ...(input.phone === undefined ? {} : { phone: input.phone }),
+      ...(input.section === undefined ? {} : { section: input.section }),
       classId: input.classId ?? classId,
       password: PASSWORD,
     });
@@ -192,6 +194,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: requestEmail,
       registerNumber: `REG-${runId}-1`,
       phone: '+91 98765 43210',
+      section: 'A',
     });
     expect(res.status).toBe(201);
     expect(res.body.registration.status).toBe('pending');
@@ -202,9 +205,10 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: string;
       register_number: string;
       phone: string | null;
+      section: string | null;
       password_hash: string;
     }>(
-      `SELECT status, email, register_number, phone, password_hash
+      `SELECT status, email, register_number, phone, section, password_hash
          FROM student_registrations WHERE id = $1`,
       [res.body.registration.id],
     );
@@ -213,6 +217,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: requestEmail,
       register_number: `REG-${runId}-1`,
       phone: '+91 98765 43210',
+      section: 'A',
     });
     expect(registration.rows[0]?.password_hash.startsWith('$argon2')).toBe(true);
 
@@ -227,6 +232,25 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
     );
     expect(audit.rows[0]?.action).toBe('registration.submit');
     expect(audit.rows[0]?.actor_user_id).toBeNull();
+  });
+
+  it('accepts a registration with the optional section left blank', async () => {
+    const publicSession = new ApiSession();
+    await publicSession.bootstrap();
+
+    const requestEmail = email('nosection');
+    const res = await submitRegistration(publicSession, {
+      email: requestEmail,
+      registerNumber: `REG-${runId}-5`,
+    });
+    expect(res.status).toBe(201);
+
+    const pool = getPool();
+    const row = await pool.query<{ section: string | null }>(
+      `SELECT section FROM student_registrations WHERE id = $1`,
+      [res.body.registration.id],
+    );
+    expect(row.rows[0]?.section).toBeNull();
   });
 
   it('refuses duplicate emails, duplicate register numbers and unknown classes', async () => {
@@ -261,6 +285,14 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       classId: randomUUID(),
     });
     expect(unknownClass.status).toBe(400);
+
+    // Section shape is validated when it is provided.
+    const badSection = await submitRegistration(publicSession, {
+      email: email('badsec'),
+      registerNumber: `REG-${runId}-6`,
+      section: 'WayTooLongSection',
+    });
+    expect(badSection.status).toBe(400);
   });
 
   it('does not let the student sign in before approval', async () => {
@@ -277,10 +309,11 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
     const admin = await loginAs(adminEmail);
     const res = await admin.get('/api/admin/registrations');
     expect(res.status).toBe(200);
-    const entry = (res.body.items as Array<{ email: string; class: { id: string } }>).find(
-      (item) => item.email === email('one'),
-    );
+    const entry = (
+      res.body.items as Array<{ email: string; section: string | null; class: { id: string } }>
+    ).find((item) => item.email === email('one'));
     expect(entry?.class.id).toBe(classId);
+    expect(entry?.section).toBe('A');
 
     const overview = await admin.get('/api/admin/overview');
     expect(overview.body.counts.pendingRegistrations).toBeGreaterThanOrEqual(1);
@@ -308,8 +341,9 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       is_active: boolean;
       register_number: string | null;
       phone: string | null;
+      section: string | null;
     }>(
-      `SELECT id, role, is_active, register_number, phone FROM users WHERE email = $1`,
+      `SELECT id, role, is_active, register_number, phone, section FROM users WHERE email = $1`,
       [email('one')],
     );
     expect(user.rows[0]).toMatchObject({
@@ -317,6 +351,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       is_active: true,
       register_number: `REG-${runId}-1`,
       phone: '+91 98765 43210',
+      section: 'A',
     });
     const studentUserId = user.rows[0]?.id ?? '';
 

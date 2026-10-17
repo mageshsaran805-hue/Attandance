@@ -46,6 +46,7 @@ export default function FacultyClassPage() {
   const [addPassword, setAddPassword] = useState('')
   const [addRegisterNumber, setAddRegisterNumber] = useState('')
   const [addPhone, setAddPhone] = useState('')
+  const [addSection, setAddSection] = useState('')
   const add = useAction()
 
   // Enroll existing student account.
@@ -59,6 +60,7 @@ export default function FacultyClassPage() {
   const [editEmail, setEditEmail] = useState('')
   const [editRegisterNumber, setEditRegisterNumber] = useState('')
   const [editPhone, setEditPhone] = useState('')
+  const [editSection, setEditSection] = useState('')
   const edit = useAction()
 
   // Reset student password.
@@ -90,6 +92,7 @@ export default function FacultyClassPage() {
     setAddPassword('')
     setAddRegisterNumber('')
     setAddPhone('')
+    setAddSection('')
     setAddOpen(true)
   }
 
@@ -108,6 +111,7 @@ export default function FacultyClassPage() {
             ? {}
             : { registerNumber: addRegisterNumber.trim() }),
           ...(addPhone.trim() === '' ? {} : { phone: addPhone.trim() }),
+          ...(addSection.trim() === '' ? {} : { section: addSection.trim() }),
         },
       })
       setAddOpen(false)
@@ -144,6 +148,7 @@ export default function FacultyClassPage() {
     setEditEmail(entry.student.email)
     setEditRegisterNumber(entry.student.registerNumber ?? '')
     setEditPhone(entry.student.phone ?? '')
+    setEditSection(entry.student.section ?? '')
   }
 
   const submitEdit = () => {
@@ -161,6 +166,7 @@ export default function FacultyClassPage() {
             ? {}
             : { registerNumber: editRegisterNumber.trim() }),
           ...(editPhone.trim() === '' ? {} : { phone: editPhone.trim() }),
+          ...(editSection.trim() === '' ? {} : { section: editSection.trim() }),
         },
       })
       setEditing(null)
@@ -373,6 +379,7 @@ export default function FacultyClassPage() {
                 <tr>
                   <Th>Student</Th>
                   <Th>Reg. no.</Th>
+                  <Th>Section</Th>
                   <Th>Email</Th>
                   <Th>Account</Th>
                   <Th>Enrolled</Th>
@@ -386,6 +393,7 @@ export default function FacultyClassPage() {
                   <tr key={entry.enrollmentId}>
                     <Td className="font-medium text-slate-900">{entry.student.fullName}</Td>
                     <Td className="text-slate-600">{entry.student.registerNumber ?? '—'}</Td>
+                    <Td className="text-slate-600">{entry.student.section ?? '—'}</Td>
                     <Td className="text-slate-600">{entry.student.email}</Td>
                     <Td>
                       {entry.student.isActive ? (
@@ -499,6 +507,14 @@ export default function FacultyClassPage() {
             onChange={(event) => setAddPhone(event.target.value)}
             error={add.issues.phone}
           />
+          <TextField
+            id="student-section"
+            label="Section (optional)"
+            value={addSection}
+            onChange={(event) => setAddSection(event.target.value)}
+            error={add.issues.section}
+            hint="e.g. A, B or A1."
+          />
           <PasswordField
             id="student-password"
             label="Initial password"
@@ -595,6 +611,13 @@ export default function FacultyClassPage() {
             value={editPhone}
             onChange={(event) => setEditPhone(event.target.value)}
             error={edit.issues.phone}
+          />
+          <TextField
+            id="student-edit-section"
+            label="Section"
+            value={editSection}
+            onChange={(event) => setEditSection(event.target.value)}
+            error={edit.issues.section}
           />
           {edit.error && <Alert>{edit.error}</Alert>}
           <div className="flex justify-end gap-2">

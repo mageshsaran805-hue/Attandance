@@ -17,6 +17,7 @@ export interface RegistrationRow {
   email: string;
   registerNumber: string;
   phone: string | null;
+  section: string | null;
   classId: string;
   passwordHash: string;
   status: RegistrationStatus;
@@ -32,6 +33,7 @@ interface DbRegistrationRow {
   email: string;
   register_number: string;
   phone: string | null;
+  section: string | null;
   class_id: string;
   password_hash: string;
   status: RegistrationStatus;
@@ -42,7 +44,7 @@ interface DbRegistrationRow {
 }
 
 const REGISTRATION_COLUMNS =
-  'id, full_name, email, register_number, phone, class_id, password_hash, status, submitted_at, reviewed_by, reviewed_at, created_user_id';
+  'id, full_name, email, register_number, phone, section, class_id, password_hash, status, submitted_at, reviewed_by, reviewed_at, created_user_id';
 
 function mapRegistration(row: DbRegistrationRow): RegistrationRow {
   return {
@@ -51,6 +53,7 @@ function mapRegistration(row: DbRegistrationRow): RegistrationRow {
     email: row.email,
     registerNumber: row.register_number,
     phone: row.phone,
+    section: row.section,
     classId: row.class_id,
     passwordHash: row.password_hash,
     status: row.status,
@@ -67,6 +70,7 @@ export async function createRegistration(
     email: string;
     registerNumber: string;
     phone: string | null;
+    section: string | null;
     classId: string;
     passwordHash: string;
   },
@@ -75,10 +79,18 @@ export async function createRegistration(
   const db = client ?? getPool();
   const { rows } = await db.query<DbRegistrationRow>(
     `INSERT INTO student_registrations
-       (full_name, email, register_number, phone, class_id, password_hash)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (full_name, email, register_number, phone, section, class_id, password_hash)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING ${REGISTRATION_COLUMNS}`,
-    [input.fullName, input.email, input.registerNumber, input.phone, input.classId, input.passwordHash],
+    [
+      input.fullName,
+      input.email,
+      input.registerNumber,
+      input.phone,
+      input.section,
+      input.classId,
+      input.passwordHash,
+    ],
   );
   return mapRegistration(expectRow(rows[0], 'student_registrations: insert'));
 }
@@ -143,6 +155,7 @@ export interface AdminRegistrationEntry {
   email: string;
   registerNumber: string;
   phone: string | null;
+  section: string | null;
   status: RegistrationStatus;
   submittedAt: string;
   reviewedAt: string | null;
@@ -162,6 +175,7 @@ interface DbAdminRegistrationRow {
   email: string;
   register_number: string;
   phone: string | null;
+  section: string | null;
   status: RegistrationStatus;
   submitted_at: string;
   reviewed_at: string | null;
@@ -184,6 +198,7 @@ function mapAdminRegistration(row: DbAdminRegistrationRow): AdminRegistrationEnt
     email: row.email,
     registerNumber: row.register_number,
     phone: row.phone,
+    section: row.section,
     status: row.status,
     submittedAt: row.submitted_at,
     reviewedAt: row.reviewed_at,
@@ -209,7 +224,7 @@ function mapAdminRegistration(row: DbAdminRegistrationRow): AdminRegistrationEnt
 }
 
 const ADMIN_REGISTRATION_SQL = `
-  SELECT r.id, r.full_name, r.email, r.register_number, r.phone, r.status,
+  SELECT r.id, r.full_name, r.email, r.register_number, r.phone, r.section, r.status,
          r.submitted_at, r.reviewed_at,
          rv.full_name AS reviewed_by_name, rv.email AS reviewed_by_email,
          cu.id AS created_user_id, cu.email AS created_user_email,
