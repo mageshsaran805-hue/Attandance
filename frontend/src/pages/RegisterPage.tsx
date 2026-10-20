@@ -304,7 +304,7 @@ export default function RegisterPage() {
         )}
 
       {!submitted && (
-        <p className="mt-5 text-center text-sm text-slate-500">
+        <p className="mt-5 text-center text-sm text-slate-600">
           Already have an account?{' '}
           <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
             Sign in
