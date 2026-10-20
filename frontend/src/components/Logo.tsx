@@ -45,7 +45,7 @@ export default function Logo({
           College Attendance
         </p>
         {subtitle && (
-          <p className={`truncate text-xs ${light ? 'text-indigo-200/80' : 'text-slate-500'}`}>
+          <p className={`truncate text-xs ${light ? 'text-indigo-200/80' : 'text-slate-600'}`}>
             {subtitle}
           </p>
         )}
