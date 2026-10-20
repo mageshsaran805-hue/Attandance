@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router'
+import AuthLayout from '../components/AuthLayout'
 import HealthIndicator from '../components/HealthIndicator'
 import LoadingScreen from '../components/LoadingScreen'
 import Alert from '../components/ui/Alert'
+import Button from '../components/ui/Button'
 import { PasswordField, SelectField, TextField } from '../components/ui/FormField'
 import { apiFetch } from '../lib/api'
 import type { RegistrationChoicesResponse, SubmittedRegistration } from '../lib/api-types'
@@ -89,53 +91,61 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col bg-slate-100 text-slate-900">
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10 sm:px-6">
-        <div className="mb-6 flex items-center gap-3">
+    <AuthLayout>
+      {submitted ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
           <span
             aria-hidden="true"
-            className="grid size-12 shrink-0 place-items-center rounded-2xl bg-indigo-600 text-2xl"
+            className="grid size-12 place-items-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200"
           >
-            🎓
+            <svg viewBox="0 0 20 20" fill="currentColor" className="size-6">
+              <path
+                fillRule="evenodd"
+                d="M16.704 5.296a1 1 0 0 1 0 1.408l-7.25 7.25a1 1 0 0 1-1.408 0l-3.25-3.25a1 1 0 1 1 1.408-1.408l2.546 2.545 6.546-6.545a1 1 0 0 1 1.408 0Z"
+                clipRule="evenodd"
+              />
+            </svg>
           </span>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">College Attendance</h1>
-            <p className="text-sm text-slate-500">Daily morning attendance</p>
-          </div>
-        </div>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-emerald-600">
+            Request received
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            Registration submitted
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">Your request is waiting for review.</p>
 
-        {submitted ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-base font-semibold">Registration submitted</h2>
-            <p className="mt-1 text-sm text-slate-500">Your request is waiting for review.</p>
-
-            <div className="mt-5 space-y-3 text-sm leading-relaxed text-slate-600">
-              {submitted.classLabel && (
-                <p>
-                  Requested class:{' '}
-                  <span className="font-medium text-slate-900">{submitted.classLabel}</span>
-                </p>
-              )}
+          <div className="mt-5 space-y-3 text-sm leading-relaxed text-slate-600">
+            {submitted.classLabel && (
               <p>
-                An administrator will approve or reject your request. Once approved, sign in
-                with <span className="font-medium text-slate-900">{email.trim()}</span> and the
-                password you chose.
+                Requested class:{' '}
+                <span className="font-medium text-slate-900">{submitted.classLabel}</span>
               </p>
-            </div>
-
-            <Link
-              to="/login"
-              className="mt-6 block w-full rounded-lg bg-indigo-600 px-4 py-2 text-center text-sm font-medium text-white transition hover:bg-indigo-700"
-            >
-              Back to sign in
-            </Link>
-          </section>
-        ) : (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-base font-semibold">Student registration</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Create a request — an administrator approves it before you can sign in.
+            )}
+            <p>
+              An administrator will approve or reject your request. Once approved, sign in with{' '}
+              <span className="font-medium text-slate-900">{email.trim()}</span> and the password
+              you chose.
             </p>
+          </div>
+
+          <Link
+            to="/login"
+            className="mt-6 block w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-medium text-white shadow-sm transition hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+          >
+            Back to sign in
+          </Link>
+        </section>
+      ) : (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+            New student
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            Student registration
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Create a request — an administrator approves it before you can sign in.
+          </p>
 
             {choices.loading && (
               <p className="mt-5 text-sm text-slate-500">Loading departments and classes…</p>
@@ -279,31 +289,34 @@ export default function RegisterPage() {
 
                 {action.error && <Alert>{action.error}</Alert>}
 
-                <button
+                <Button
                   type="submit"
-                  disabled={action.busy || !ready || !passwordsMatch}
-                  className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 focus:outline-2 focus:outline-offset-2 focus:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  variant="primary"
+                  className="w-full"
+                  loading={action.busy}
+                  disabled={!ready || !passwordsMatch}
                 >
                   {action.busy ? 'Submitting…' : 'Submit registration request'}
-                </button>
+                </Button>
               </form>
             )}
           </section>
         )}
 
-        {!submitted && (
-          <p className="mt-5 text-center text-sm text-slate-500">
-            Already have an account?{' '}
-            <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
-              Sign in
-            </Link>
-          </p>
-        )}
+      {!submitted && (
+        <p className="mt-5 text-center text-sm text-slate-500">
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
+            Sign in
+          </Link>
+        </p>
+      )}
 
+      {import.meta.env.DEV && (
         <div className="mt-6">
           <HealthIndicator />
         </div>
-      </main>
-    </div>
+      )}
+    </AuthLayout>
   )
 }

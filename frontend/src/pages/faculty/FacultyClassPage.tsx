@@ -353,7 +353,7 @@ export default function FacultyClassPage() {
 
         {attendance.data && attendance.data.recent.length > 0 && (
           <>
-            <h4 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h4 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Recent sessions
             </h4>
             <Table label="Recent attendance sessions">
@@ -559,7 +559,7 @@ export default function FacultyClassPage() {
             value={addPassword}
             onChange={(event) => setAddPassword(event.target.value)}
             error={add.issues.password}
-            hint="At least 8 characters with a letter and a number. The student signs in with it from the attendance phase onward."
+            hint="At least 8 characters with a letter and a number. The student uses it to sign in and mark attendance."
             required
             autoComplete="new-password"
           />

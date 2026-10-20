@@ -333,7 +333,7 @@ export default function AdminUsersPage() {
                   <tr key={account.id}>
                     <Td className="font-medium text-slate-900">
                       {account.fullName}
-                      {isSelf && <span className="ml-2 text-xs text-slate-400">(you)</span>}
+                      {isSelf && <span className="ml-2 text-xs text-slate-500">(you)</span>}
                     </Td>
                     <Td className="text-slate-600">{account.email}</Td>
                     <Td>

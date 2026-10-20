@@ -143,7 +143,7 @@ export default function AdminCalendarPage() {
             </thead>
             <tbody>
               {days.data.nonWorkingDays.map((entry) => (
-                <tr key={entry.id} className={entry.day < today ? 'text-slate-400' : undefined}>
+                <tr key={entry.id} className={entry.day < today ? 'text-slate-500' : undefined}>
                   <Td className="whitespace-nowrap font-medium">
                     <span className={entry.day < today ? '' : 'text-slate-900'}>
                       {formatDate(entry.day)}

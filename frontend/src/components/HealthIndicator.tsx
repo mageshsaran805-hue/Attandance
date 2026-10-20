@@ -112,7 +112,7 @@ export default function HealthIndicator() {
           <>
             <StatusLine tone="ok" label="API server" value={`Online · ${state.data.app.timezone}`} />
             <DatabaseStatus database={state.data.database} />
-            <p className="pl-5 text-xs text-slate-400">
+            <p className="pl-5 text-xs text-slate-500">
               Checked at {new Date(state.data.app.timestamp).toLocaleTimeString()}
             </p>
           </>

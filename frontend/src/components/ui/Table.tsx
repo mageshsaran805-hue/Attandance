@@ -3,7 +3,12 @@ import type { ReactNode } from 'react'
 /** Consistent table chrome: horizontal scroll and borders on small screens. */
 export function Table({ children, label }: { children: ReactNode; label?: string }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div
+      role="region"
+      aria-label={label ?? 'Table'}
+      tabIndex={0}
+      className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+    >
       <table aria-label={label} className="w-full min-w-[36rem] text-left text-sm">
         {children}
       </table>
@@ -15,7 +20,7 @@ export function Th({ children, className = '' }: { children?: ReactNode; classNa
   return (
     <th
       scope="col"
-      className={`whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${className}`}
+      className={`whitespace-nowrap bg-slate-50/80 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${className}`}
     >
       {children}
     </th>

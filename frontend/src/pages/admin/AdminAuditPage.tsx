@@ -150,7 +150,7 @@ export default function AdminAuditPage() {
                           <p className="text-xs text-slate-500">{entry.actor.email}</p>
                         </>
                       ) : (
-                        <span className="text-slate-400">Unauthenticated</span>
+                        <span className="text-slate-500">Unauthenticated</span>
                       )}
                     </Td>
                     <Td>
@@ -160,13 +160,13 @@ export default function AdminAuditPage() {
                     </Td>
                     <Td>
                       <p className="text-slate-700">{entry.entityType}</p>
-                      <p className="max-w-40 truncate text-xs text-slate-400" title={entry.entityId}>
+                      <p className="max-w-40 truncate text-xs text-slate-500" title={entry.entityId}>
                         {entry.entityId}
                       </p>
                     </Td>
                     <Td>
                       {entry.oldValue === null && entry.newValue === null ? (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-500">—</span>
                       ) : (
                         <details>
                           <summary className="cursor-pointer text-sm font-medium text-indigo-600">

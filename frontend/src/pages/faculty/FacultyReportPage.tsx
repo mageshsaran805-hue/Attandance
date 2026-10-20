@@ -4,6 +4,7 @@ import AppShell from '../../components/AppShell'
 import ClassReportView from '../../components/ClassReportView'
 import DateRangeFilter from '../../components/DateRangeFilter'
 import Alert from '../../components/ui/Alert'
+import LoadingSkeleton from '../../components/ui/LoadingSkeleton'
 import PageHeader from '../../components/ui/PageHeader'
 import type { ClassReport } from '../../lib/api-types'
 import { defaultRangeIso } from '../../lib/format'
@@ -47,7 +48,7 @@ export default function FacultyReportPage() {
       />
 
       {report.error && <Alert className="mb-4">{report.error}</Alert>}
-      {report.loading && <p className="text-sm text-slate-500">Loading class report…</p>}
+      {report.loading && <LoadingSkeleton label="Loading class report…" cards={5} rows={5} />}
       {report.data && <ClassReportView report={report.data} />}
     </AppShell>
   )

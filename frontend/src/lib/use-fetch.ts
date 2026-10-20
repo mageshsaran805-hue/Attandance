@@ -11,8 +11,14 @@ export interface FetchState<T> {
 
 interface Loaded<T> {
   key: string
+  path: string
   data: T | null
   error: string | null
+}
+
+interface UseFetchOptions {
+  /** Keep showing the last successful value while the same path reloads. */
+  keepPreviousData?: boolean
 }
 
 /**
@@ -23,9 +29,10 @@ interface Loaded<T> {
  * Loading is derived during render from a request key, so no state is set
  * synchronously inside the effect.
  */
-export function useFetch<T>(path: string | null): FetchState<T> {
+export function useFetch<T>(path: string | null, options: UseFetchOptions = {}): FetchState<T> {
   const [result, setResult] = useState<Loaded<T> | null>(null)
   const [reloadCount, setReloadCount] = useState(0)
+  const keepPreviousData = options.keepPreviousData === true
 
   const key = path === null ? null : `${reloadCount}\u0000${path}`
 
@@ -38,33 +45,37 @@ export function useFetch<T>(path: string | null): FetchState<T> {
     apiFetch<T>(path)
       .then((data) => {
         if (!cancelled) {
-          setResult({ key, data, error: null })
+          setResult({ key, path, data, error: null })
         }
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
-          setResult({
+          setResult((previous) => ({
             key,
-            data: null,
+            path,
+            data: keepPreviousData && previous?.path === path ? previous.data : null,
             error: cause instanceof ApiRequestError ? cause.message : 'Could not reach the server.',
-          })
+          }))
         }
       })
 
     return () => {
       cancelled = true
     }
-  }, [key, path])
+  }, [key, path, keepPreviousData])
 
   const reload = useCallback(() => {
     setReloadCount((count) => count + 1)
   }, [])
 
   const fresh = result !== null && result.key === key
+  const previousForSamePath = result !== null && path !== null && result.path === path
+  const showPrevious = keepPreviousData && previousForSamePath
+
   return {
-    data: fresh ? result.data : null,
-    error: fresh ? result.error : null,
-    loading: key !== null && !fresh,
+    data: (fresh || showPrevious) && result !== null ? result.data : null,
+    error: fresh && result !== null ? result.error : null,
+    loading: key !== null && !fresh && !showPrevious,
     reload,
   }
 }

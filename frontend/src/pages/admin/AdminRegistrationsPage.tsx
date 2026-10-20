@@ -232,7 +232,7 @@ export default function AdminRegistrationsPage() {
                   <Td className="text-slate-600">{entry.section ?? '—'}</Td>
                   <Td>
                     <div className="text-slate-700">{entry.class.name}</div>
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-slate-500">
                       {entry.class.department.name} · {entry.class.academicYear}
                     </div>
                   </Td>
@@ -256,11 +256,11 @@ export default function AdminRegistrationsPage() {
                   ) : (
                     <Td>
                       <div className="text-slate-600">{formatDateTime(entry.reviewedAt)}</div>
-                      <div className="text-xs text-slate-400">
+                      <div className="text-xs text-slate-500">
                         {entry.reviewedBy?.fullName ?? '—'}
                       </div>
                       {entry.status === 'approved' && entry.createdUser && (
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs text-slate-500">
                           Account: {entry.createdUser.email}
                         </div>
                       )}

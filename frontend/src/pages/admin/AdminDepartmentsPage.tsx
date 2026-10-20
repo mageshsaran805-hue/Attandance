@@ -173,7 +173,7 @@ export default function AdminDepartmentsPage() {
                         <p className="text-xs text-slate-500">{department.hod.email}</p>
                       </div>
                     ) : (
-                      <span className="text-slate-400">Not assigned</span>
+                      <span className="text-slate-500">Not assigned</span>
                     )}
                   </Td>
                   <Td className="text-right tabular-nums">{department.classCount}</Td>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { NonWorkingDaysResponse, StudentHistoryResponse } from '../lib/api-types'
-import { todayIso } from '../lib/format'
+import { formatDate, todayIso } from '../lib/format'
 import { useFetch } from '../lib/use-fetch'
 import Alert from './ui/Alert'
 import Button from './ui/Button'
@@ -34,8 +34,8 @@ const TONE_CLASSES: Record<DayTone, string> = {
   absent: 'bg-rose-100 text-rose-800',
   pending: 'bg-indigo-100 text-indigo-800',
   holiday: 'bg-slate-200 text-slate-600',
-  empty: 'bg-white text-slate-400 ring-1 ring-inset ring-slate-200',
-  future: 'bg-white text-slate-300 ring-1 ring-inset ring-slate-100',
+  empty: 'bg-white text-slate-500 ring-1 ring-inset ring-slate-200',
+  future: 'bg-white text-slate-500 ring-1 ring-inset ring-slate-200',
 }
 
 const LEGEND: Array<{ tone: DayTone; label: string }> = [
@@ -149,6 +149,15 @@ export default function AttendanceCalendar() {
     })
   }
 
+  const paddedCells: Array<DayCell | null> = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...cells,
+  ]
+  const weeks: Array<Array<DayCell | null>> = []
+  for (let index = 0; index < paddedCells.length; index += 7) {
+    weeks.push(paddedCells.slice(index, index + 7))
+  }
+
   return (
     <section className="mt-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -168,7 +177,10 @@ export default function AttendanceCalendar() {
           >
             ←
           </Button>
-          <span className="min-w-32 text-center text-sm font-medium text-slate-700">
+          <span
+            aria-live="polite"
+            className="min-w-32 text-center text-sm font-medium text-slate-700"
+          >
             {monthLabel(month)}
           </span>
           <Button
@@ -186,29 +198,49 @@ export default function AttendanceCalendar() {
 
       {history.data && (
         <>
-          <div className="mt-4 grid grid-cols-7 gap-1">
-            {WEEKDAYS.map((weekday) => (
-              <div
-                key={weekday}
-                className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-              >
-                {weekday}
-              </div>
-            ))}
-            {Array.from({ length: firstWeekday }, (_, index) => (
-              <div key={`blank-${index}`} />
-            ))}
-            {cells.map((cell) => (
-              <div
-                key={cell.iso}
-                title={cell.title}
-                className={`flex h-14 flex-col rounded-lg p-1.5 ${TONE_CLASSES[cell.tone]}`}
-              >
-                <span className="text-xs font-semibold leading-none">{cell.dayNumber}</span>
-                {cell.count !== '' && (
-                  <span className="mt-auto text-[11px] font-medium leading-none">
-                    {cell.count}
-                  </span>
+          <div
+            role="grid"
+            aria-label={`Attendance calendar for ${monthLabel(month)}`}
+            className="mt-4 grid grid-cols-7 gap-1"
+          >
+            <div role="row" className="contents">
+              {WEEKDAYS.map((weekday) => (
+                <div
+                  key={weekday}
+                  role="columnheader"
+                  className="py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                >
+                  {weekday}
+                </div>
+              ))}
+            </div>
+            {weeks.map((week, weekIndex) => (
+              <div key={`week-${weekIndex}`} role="row" className="contents">
+                {week.map((cell, dayIndex) =>
+                  cell ? (
+                    <div
+                      key={cell.iso}
+                      role="gridcell"
+                      title={cell.title}
+                      aria-label={`${formatDate(cell.iso)}: ${cell.title}${
+                        cell.count !== '' ? ` (${cell.count} attended)` : ''
+                      }`}
+                      className={`flex h-14 flex-col rounded-lg p-1.5 ${TONE_CLASSES[cell.tone]}`}
+                    >
+                      <span className="text-xs font-semibold leading-none">{cell.dayNumber}</span>
+                      {cell.count !== '' && (
+                        <span className="mt-auto text-[11px] font-medium leading-none">
+                          {cell.count}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      key={`blank-${weekIndex}-${dayIndex}`}
+                      role="gridcell"
+                      aria-hidden="true"
+                    />
+                  ),
                 )}
               </div>
             ))}

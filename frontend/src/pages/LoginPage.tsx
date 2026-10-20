@@ -1,8 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router'
+import AuthLayout from '../components/AuthLayout'
 import HealthIndicator from '../components/HealthIndicator'
 import LoadingScreen from '../components/LoadingScreen'
-import { PasswordField } from '../components/ui/FormField'
+import Alert from '../components/ui/Alert'
+import Button from '../components/ui/Button'
+import { PasswordField, TextField } from '../components/ui/FormField'
 import { useAuth } from '../lib/auth-context'
 import { ApiRequestError } from '../lib/api'
 import { HOME_PATH_BY_ROLE } from '../lib/roles'
@@ -42,93 +45,81 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col bg-slate-100 text-slate-900">
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10 sm:px-6">
-        <div className="mb-6 flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="grid size-12 shrink-0 place-items-center rounded-2xl bg-indigo-600 text-2xl"
+    <AuthLayout>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Welcome back</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Sign in</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Use the account provided by your college administrator.
+        </p>
+
+        <form onSubmit={(event) => void handleSubmit(event)} className="mt-6 space-y-4" noValidate>
+          <TextField
+            id="email"
+            label="Email"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+
+          <PasswordField
+            id="password"
+            label="Password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+
+          {error && <Alert>{error}</Alert>}
+
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full"
+            loading={submitting}
+            disabled={email.trim() === '' || password === ''}
           >
-            🎓
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">College Attendance</h1>
-            <p className="text-sm text-slate-500">Daily morning attendance</p>
-          </div>
-        </div>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h2 className="text-base font-semibold">Sign in</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Use the account provided by your college administrator.
-          </p>
-
-          <form onSubmit={(event) => void handleSubmit(event)} className="mt-5 space-y-4" noValidate>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="username"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-2 focus:outline-offset-0 focus:outline-indigo-600"
-              />
-            </div>
-
-            <PasswordField
-              id="password"
-              label="Password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-
-            {error && (
-              <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting || email.trim() === '' || password === ''}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 focus:outline-2 focus:outline-offset-2 focus:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-
-          <p className="mt-5 text-sm text-slate-500">
+        <div className="mt-6 border-t border-slate-100 pt-5">
+          <p className="text-sm text-slate-500">
             New student without an account?{' '}
             <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-700">
               Submit a registration request
             </Link>
           </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Forgot your password? Contact your college administrator.
+          </p>
+        </div>
 
+        {import.meta.env.DEV && (
           <details className="mt-5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
             <summary className="cursor-pointer select-none font-medium text-slate-600">
               Development seed accounts (fake data)
             </summary>
             <p className="mt-2">
-              After running <code className="rounded bg-slate-200 px-1">npm run seed:dev</code>, every
-              seeded account signs in with password{' '}
+              After running <code className="rounded bg-slate-200 px-1">npm run seed:dev</code>,
+              every seeded account signs in with password{' '}
               <code className="rounded bg-slate-200 px-1">Demo@12345</code> — for example{' '}
               <code className="rounded bg-slate-200 px-1">admin@college.test</code> or{' '}
               <code className="rounded bg-slate-200 px-1">hod.cse@college.test</code>. See
               docs/setup.md for the full list.
             </p>
           </details>
-        </section>
+        )}
+      </section>
 
+      {import.meta.env.DEV && (
         <div className="mt-6">
           <HealthIndicator />
         </div>
-      </main>
-    </div>
+      )}
+    </AuthLayout>
   )
 }

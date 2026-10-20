@@ -3,6 +3,7 @@ import AppShell from '../../components/AppShell'
 import Alert from '../../components/ui/Alert'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
+import LoadingSkeleton from '../../components/ui/LoadingSkeleton'
 import PageHeader from '../../components/ui/PageHeader'
 import StatCard from '../../components/ui/StatCard'
 import { Table, Td, Th } from '../../components/ui/Table'
@@ -25,7 +26,7 @@ export default function HodHome() {
       />
 
       {overview.error && <Alert className="mb-4">{overview.error}</Alert>}
-      {overview.loading && <p className="text-sm text-slate-500">Loading department…</p>}
+      {overview.loading && <LoadingSkeleton label="Loading department…" cards={3} rows={3} />}
 
       {overview.data && (
         <>
@@ -69,7 +70,7 @@ export default function HodHome() {
                     <Td className="text-right tabular-nums">{entry.studentCount}</Td>
                     <Td>
                       {entry.faculty.length === 0 ? (
-                        <span className="text-slate-400">None assigned</span>
+                        <span className="text-slate-500">None assigned</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {entry.faculty.map((member) => (

@@ -1,13 +1,17 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import AppShell from '../../components/AppShell'
+import AttendanceBars from '../../components/AttendanceBars'
 import DateRangeFilter from '../../components/DateRangeFilter'
 import Alert from '../../components/ui/Alert'
+import Button from '../../components/ui/Button'
 import EmptyState from '../../components/ui/EmptyState'
+import LoadingSkeleton from '../../components/ui/LoadingSkeleton'
 import PageHeader from '../../components/ui/PageHeader'
 import StatCard from '../../components/ui/StatCard'
 import { Table, Td, Th } from '../../components/ui/Table'
 import type { DepartmentReport } from '../../lib/api-types'
+import { downloadCsv, type CsvCell } from '../../lib/csv'
 import { defaultRangeIso, formatPercent } from '../../lib/format'
 import { useFetch } from '../../lib/use-fetch'
 
@@ -22,11 +26,70 @@ export default function HodReportsPage() {
   const [to, setTo] = useState(initialRange.to)
   const report = useFetch<DepartmentReport>(`/api/hod/reports/attendance?from=${from}&to=${to}`)
 
+  const exportCsv = () => {
+    if (!report.data) {
+      return
+    }
+    const data = report.data
+    const rows: CsvCell[][] = [
+      ['Department attendance report'],
+      ['Department', data.department.name],
+      ['Code', data.department.code],
+      ['Range', `${data.from} to ${data.to}`],
+      [],
+      ['Totals'],
+      ['Sessions', 'Settled sessions', 'Present', 'On duty', 'Absent', 'Attendance %'],
+      [
+        data.totals.sessions,
+        data.totals.settledSessions,
+        data.totals.present,
+        data.totals.onDuty,
+        data.totals.absent,
+        data.totals.percentage === null ? '' : data.totals.percentage.toFixed(1),
+      ],
+      [],
+      ['Classes'],
+      [
+        'Class',
+        'Academic year',
+        'Students',
+        'Sessions',
+        'Settled sessions',
+        'Present',
+        'On duty',
+        'Absent',
+        'Attendance %',
+      ],
+      ...data.classes.map((entry) => [
+        entry.className,
+        entry.academicYear,
+        entry.studentCount,
+        entry.sessions,
+        entry.settledSessions,
+        entry.present,
+        entry.onDuty,
+        entry.absent,
+        entry.percentage === null ? '' : entry.percentage.toFixed(1),
+      ]),
+    ]
+    downloadCsv(
+      `attendance-${data.department.code}-${data.from}-to-${data.to}.csv`,
+      rows,
+    )
+  }
+
   return (
     <AppShell>
       <PageHeader
         title={report.data ? `${report.data.department.name} reports` : 'Department reports'}
         description="Attendance across your department's classes. Percentages count closed sessions only."
+        actions={
+          report.data ? (
+            <Button variant="secondary" onClick={exportCsv}>
+              Download CSV
+            </Button>
+          ) : undefined
+        }
       />
 
       <DateRangeFilter
@@ -38,7 +101,7 @@ export default function HodReportsPage() {
       />
 
       {report.error && <Alert className="mb-4">{report.error}</Alert>}
-      {report.loading && <p className="text-sm text-slate-500">Loading report…</p>}
+      {report.loading && <LoadingSkeleton label="Loading report…" cards={5} rows={4} />}
 
       {report.data && (
         <>
@@ -55,6 +118,23 @@ export default function HodReportsPage() {
               label="Attendance"
               value={formatPercent(report.data.totals.percentage)}
               hint="Present + OD ÷ settled marks"
+            />
+          </div>
+
+          <div className="mt-6">
+            <AttendanceBars
+              title="Attendance by class"
+              description="Present + on duty ÷ settled marks, across the selected range."
+              items={report.data.classes.map((entry) => ({
+                key: entry.classId,
+                label: entry.className,
+                sublabel: `${entry.academicYear} · ${entry.studentCount} ${
+                  entry.studentCount === 1 ? 'student' : 'students'
+                }`,
+                detail: `${entry.present + entry.onDuty} present/on duty · ${entry.absent} absent`,
+                percentage: entry.percentage,
+              }))}
+              emptyMessage="No class attendance in this range yet."
             />
           </div>
 

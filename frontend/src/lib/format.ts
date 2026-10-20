@@ -12,6 +12,12 @@ const dateFormatter = new Intl.DateTimeFormat('en-IN', {
   year: 'numeric',
 })
 
+const shortDateFormatter = new Intl.DateTimeFormat('en-IN', {
+  timeZone: TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+})
+
 const dateTimeFormatter = new Intl.DateTimeFormat('en-IN', {
   timeZone: TIME_ZONE,
   day: 'numeric',
@@ -33,6 +39,15 @@ export function formatDate(value: string | null | undefined): string {
   }
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '—' : dateFormatter.format(date)
+}
+
+/** Compact date for chart axes, e.g. "20 Oct". */
+export function formatShortDate(value: string | null | undefined): string {
+  if (!value) {
+    return '—'
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : shortDateFormatter.format(date)
 }
 
 export function formatDateTime(value: string | null | undefined): string {

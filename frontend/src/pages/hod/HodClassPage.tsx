@@ -264,7 +264,7 @@ export default function HodClassPage() {
       />
 
       {notFound && (
-        <p className="mt-2 text-xs text-slate-400">
+        <p className="mt-2 text-xs text-slate-500">
           If this class belongs to another department, it is not visible from your account.
         </p>
       )}

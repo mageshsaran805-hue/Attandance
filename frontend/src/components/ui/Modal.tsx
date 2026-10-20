@@ -33,6 +33,7 @@ export default function Modal({
   return (
     <dialog
       ref={dialogRef}
+      aria-label={title}
       onCancel={(event) => {
         event.preventDefault()
         onClose()
@@ -51,7 +52,7 @@ export default function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-lg px-2 py-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg px-2 py-0.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
           >
             ✕
           </button>
