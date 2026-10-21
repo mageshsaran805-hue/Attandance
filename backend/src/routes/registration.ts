@@ -11,7 +11,6 @@ import {
   passwordSchema,
   phoneSchema,
   registerNumberSchema,
-  sectionSchema,
 } from '../lib/schemas.js';
 import { validateBody } from '../middleware/validate.js';
 import { logAudit } from '../services/audit.js';
@@ -49,7 +48,6 @@ const registerSchema = z.object({
   email: emailSchema,
   registerNumber: registerNumberSchema,
   phone: phoneSchema.optional(),
-  section: sectionSchema.optional(),
   classId: z.uuid('must be a valid class id'),
   password: passwordSchema,
 });
@@ -88,7 +86,7 @@ registrationRouter.post(
           email: input.email,
           registerNumber: input.registerNumber,
           phone: input.phone ?? null,
-          section: input.section ?? null,
+          section: null,
           classId: input.classId,
           passwordHash,
         },

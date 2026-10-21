@@ -94,7 +94,6 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: string;
       registerNumber: string;
       phone?: string;
-      section?: string;
       classId?: string;
     },
   ) {
@@ -103,7 +102,6 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: input.email,
       registerNumber: input.registerNumber,
       ...(input.phone === undefined ? {} : { phone: input.phone }),
-      ...(input.section === undefined ? {} : { section: input.section }),
       classId: input.classId ?? classId,
       password: PASSWORD,
     });
@@ -194,7 +192,6 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: requestEmail,
       registerNumber: `REG-${runId}-1`,
       phone: '+91 98765 43210',
-      section: 'A',
     });
     expect(res.status).toBe(201);
     expect(res.body.registration.status).toBe('pending');
@@ -217,7 +214,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       email: requestEmail,
       register_number: `REG-${runId}-1`,
       phone: '+91 98765 43210',
-      section: 'A',
+      section: null,
     });
     expect(registration.rows[0]?.password_hash.startsWith('$argon2')).toBe(true);
 
@@ -234,16 +231,22 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
     expect(audit.rows[0]?.actor_user_id).toBeNull();
   });
 
-  it('accepts a registration with the optional section left blank', async () => {
+  it('ignores the removed section field on public registration', async () => {
     const publicSession = new ApiSession();
     await publicSession.bootstrap();
 
     const requestEmail = email('nosection');
-    const res = await submitRegistration(publicSession, {
+    const res = await publicSession.post('/api/registration', {
+      fullName: `Reg Student REG-${runId}-5`,
       email: requestEmail,
       registerNumber: `REG-${runId}-5`,
+      // Old clients may still send this; the public form no longer collects it.
+      section: 'A',
+      classId,
+      password: PASSWORD,
     });
     expect(res.status).toBe(201);
+    registrationIds.push(res.body.registration.id as string);
 
     const pool = getPool();
     const row = await pool.query<{ section: string | null }>(
@@ -285,14 +288,6 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       classId: randomUUID(),
     });
     expect(unknownClass.status).toBe(400);
-
-    // Section shape is validated when it is provided.
-    const badSection = await submitRegistration(publicSession, {
-      email: email('badsec'),
-      registerNumber: `REG-${runId}-6`,
-      section: 'WayTooLongSection',
-    });
-    expect(badSection.status).toBe(400);
   });
 
   it('does not let the student sign in before approval', async () => {
@@ -313,7 +308,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       res.body.items as Array<{ email: string; section: string | null; class: { id: string } }>
     ).find((item) => item.email === email('one'));
     expect(entry?.class.id).toBe(classId);
-    expect(entry?.section).toBe('A');
+    expect(entry?.section).toBeNull();
 
     const overview = await admin.get('/api/admin/overview');
     expect(overview.body.counts.pendingRegistrations).toBeGreaterThanOrEqual(1);
@@ -351,7 +346,7 @@ describe.skipIf(!enabled)('student registration integration (real database)', ()
       is_active: true,
       register_number: `REG-${runId}-1`,
       phone: '+91 98765 43210',
-      section: 'A',
+      section: null,
     });
     const studentUserId = user.rows[0]?.id ?? '';
 

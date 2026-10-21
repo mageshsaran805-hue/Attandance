@@ -10,34 +10,38 @@ export interface FetchState<T> {
 }
 
 interface Loaded<T> {
-  key: string
   path: string
   data: T | null
   error: string | null
 }
 
 interface UseFetchOptions {
-  /** Keep showing the last successful value while the same path reloads. */
-  keepPreviousData?: boolean
+  /**
+   * How often to refresh in the background while the page is visible.
+   * Defaults to 20 seconds; pass 0 to disable interval polling.
+   */
+  refreshIntervalMs?: number
 }
+
+const DEFAULT_REFRESH_INTERVAL_MS = 20_000
 
 /**
  * Minimal data-loading hook: fetches `path` whenever it changes and exposes a
  * manual reload. Pass `null` to stay idle (e.g. a modal's data source that
  * should only load while the modal is open).
  *
- * Loading is derived during render from a request key, so no state is set
- * synchronously inside the effect.
+ * Data is also refreshed automatically so screens stay current when another
+ * user changes something: every `refreshIntervalMs` while the tab is visible,
+ * and immediately when the tab regains focus. Background reloads keep the
+ * previous data on screen instead of flashing a loading skeleton.
  */
 export function useFetch<T>(path: string | null, options: UseFetchOptions = {}): FetchState<T> {
   const [result, setResult] = useState<Loaded<T> | null>(null)
   const [reloadCount, setReloadCount] = useState(0)
-  const keepPreviousData = options.keepPreviousData === true
-
-  const key = path === null ? null : `${reloadCount}\u0000${path}`
+  const refreshIntervalMs = options.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS
 
   useEffect(() => {
-    if (path === null || key === null) {
+    if (path === null) {
       return
     }
 
@@ -45,15 +49,16 @@ export function useFetch<T>(path: string | null, options: UseFetchOptions = {}):
     apiFetch<T>(path)
       .then((data) => {
         if (!cancelled) {
-          setResult({ key, path, data, error: null })
+          setResult({ path, data, error: null })
         }
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
           setResult((previous) => ({
-            key,
             path,
-            data: keepPreviousData && previous?.path === path ? previous.data : null,
+            // Keep the last successful value for this path while a retry or
+            // background refresh is failing; a different path starts empty.
+            data: previous?.path === path ? previous.data : null,
             error: cause instanceof ApiRequestError ? cause.message : 'Could not reach the server.',
           }))
         }
@@ -62,20 +67,43 @@ export function useFetch<T>(path: string | null, options: UseFetchOptions = {}):
     return () => {
       cancelled = true
     }
-  }, [key, path, keepPreviousData])
+  }, [path, reloadCount])
 
   const reload = useCallback(() => {
     setReloadCount((count) => count + 1)
   }, [])
 
-  const fresh = result !== null && result.key === key
-  const previousForSamePath = result !== null && path !== null && result.path === path
-  const showPrevious = keepPreviousData && previousForSamePath
+  useEffect(() => {
+    if (path === null) {
+      return
+    }
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        reload()
+      }
+    }
+
+    const timer =
+      refreshIntervalMs > 0 ? window.setInterval(refreshIfVisible, refreshIntervalMs) : null
+    window.addEventListener('focus', refreshIfVisible)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+
+    return () => {
+      if (timer !== null) {
+        window.clearInterval(timer)
+      }
+      window.removeEventListener('focus', refreshIfVisible)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
+  }, [path, refreshIntervalMs, reload])
+
+  const current = result !== null && path !== null && result.path === path ? result : null
 
   return {
-    data: (fresh || showPrevious) && result !== null ? result.data : null,
-    error: fresh && result !== null ? result.error : null,
-    loading: key !== null && !fresh && !showPrevious,
+    data: current?.data ?? null,
+    error: current?.error ?? null,
+    loading: path !== null && current === null,
     reload,
   }
 }

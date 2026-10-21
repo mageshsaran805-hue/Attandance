@@ -115,7 +115,7 @@ row is never deleted (pending → approved/rejected once).
 | `id` | uuid, PK |
 | `full_name`, `email`, `register_number` | submitted details; email/register number are matched case-insensitively |
 | `phone` | nullable |
-| `section` | nullable (added in 0003); optional section the applicant provided, copied to the student account on approval |
+| `section` | nullable (added in 0003); legacy column — the public registration form no longer collects a section, but existing values are kept and approval still copies them to the student account |
 | `class_id` | FK → classes; the class the student chose, enrolled on approval |
 | `password_hash` | Argon2id hash captured at submission; the plaintext password never reaches the database or logs |
 | `status` | enum `registration_status`: `pending`, `approved`, `rejected` |

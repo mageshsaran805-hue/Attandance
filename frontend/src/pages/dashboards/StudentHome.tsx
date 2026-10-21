@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import AppShell from '../../components/AppShell'
 import AttendanceCalendar from '../../components/AttendanceCalendar'
 import DateRangeFilter from '../../components/DateRangeFilter'
@@ -189,19 +189,44 @@ function StudentClassCard({ entry, onChanged }: { entry: StudentTodayEntry; onCh
   const mark = useAction()
   const session = entry.session
   const record = entry.record
+  const submitting = useRef(false)
+  const autoSubmitted = useRef<string | null>(null)
 
-  const submit = () => {
-    if (!session) {
+  const submit = (code = otp): boolean => {
+    if (!session || code.length !== 6 || submitting.current) {
+      return false
+    }
+    submitting.current = true
+    void mark
+      .run(async () => {
+        await apiFetch<StudentMarkResponse>(`/api/student/sessions/${session.id}/mark`, {
+          method: 'POST',
+          body: { otp: code },
+        })
+        setOtp('')
+        autoSubmitted.current = null
+        onChanged()
+      })
+      .finally(() => {
+        submitting.current = false
+      })
+    return true
+  }
+
+  const changeOtp = (value: string) => {
+    const next = value.replace(/\D/g, '').slice(0, 6)
+    setOtp(next)
+    if (next.length < 6) {
+      // Allow the same code to be retried after the student edits it.
+      autoSubmitted.current = null
       return
     }
-    void mark.run(async () => {
-      await apiFetch<StudentMarkResponse>(`/api/student/sessions/${session.id}/mark`, {
-        method: 'POST',
-        body: { otp },
-      })
-      setOtp('')
-      onChanged()
-    })
+    const submissionKey = session ? `${session.id}:${next}` : null
+    if (submissionKey !== null && autoSubmitted.current !== submissionKey) {
+      if (submit(next)) {
+        autoSubmitted.current = submissionKey
+      }
+    }
   }
 
   return (
@@ -267,11 +292,12 @@ function StudentClassCard({ entry, onChanged }: { entry: StudentTodayEntry; onCh
                 id={`otp-${entry.class.id}`}
                 label="Attendance OTP"
                 value={otp}
-                onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(event) => changeOtp(event.target.value)}
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 placeholder="6-digit code"
                 maxLength={6}
+                disabled={mark.busy}
                 className="text-center font-mono text-lg tracking-[0.35em]"
                 required
               />

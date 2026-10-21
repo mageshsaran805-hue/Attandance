@@ -96,7 +96,6 @@ export default function FacultySessionPage() {
 function FacultySessionView({ sessionId }: { sessionId: string | undefined }) {
   const detail = useFetch<FacultySessionResponse>(
     sessionId ? `/api/faculty/sessions/${sessionId}` : null,
-    { keepPreviousData: true },
   )
   const data = detail.data
   const session = data?.session ?? null
@@ -116,14 +115,6 @@ function FacultySessionView({ sessionId }: { sessionId: string | undefined }) {
   const close = useAction()
   const mark = useAction()
   const bulk = useAction()
-
-  useEffect(() => {
-    if (session?.status !== 'open') {
-      return
-    }
-    const timer = setInterval(reload, 20_000)
-    return () => clearInterval(timer)
-  }, [session?.status, reload])
 
   useEffect(() => {
     if (session?.status !== 'open') {
@@ -390,7 +381,7 @@ function FacultySessionView({ sessionId }: { sessionId: string | undefined }) {
                     aria-hidden="true"
                     className="size-2 animate-pulse rounded-full bg-emerald-500"
                   />
-                  Live · updates every 20s
+                  Live · auto-refreshes
                 </span>
               )}
             </div>
