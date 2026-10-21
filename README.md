@@ -117,15 +117,15 @@ Administrator (role `admin`):
 | --- | --- | --- |
 | `/api/admin/overview` | GET | Headline counts (departments, classes, active accounts by role). |
 | `/api/admin/departments` | GET, POST | List departments with HOD and usage counts; create a department. |
-| `/api/admin/departments/:id` | PATCH | Rename or recode a department. |
+| `/api/admin/departments/:id` | PATCH, DELETE | Rename/recode a department; DELETE permanently removes the department and every class/data row inside it. |
 | `/api/admin/departments/:id/hod` | PUT | Assign/clear the department HOD (strict 1:1, `hodUserId: null` clears). |
 | `/api/admin/users` | GET, POST | Filter/search accounts; create admin/HOD/faculty accounts (students are faculty-created). Creating with the email of a deactivated account reactivates and updates that account instead of failing. |
-| `/api/admin/users/:id` | PATCH | Update name/email. |
+| `/api/admin/users/:id` | PATCH, DELETE | Update name/email; DELETE permanently removes the account, frees its email for reuse, and removes account-owned history. |
 | `/api/admin/users/:id/status` | POST | Activate/deactivate (`isActive`); deactivation applies on the next request. |
 | `/api/admin/users/:id/role` | POST | Change role; refused (409) while active role-bound records exist. |
 | `/api/admin/users/:id/reset-password` | POST | Set a new password. |
 | `/api/admin/classes` | GET, POST | List classes with counts; create a class in a department. |
-| `/api/admin/classes/:id` | PATCH | Rename a class or change its academic year (department is immutable). |
+| `/api/admin/classes/:id` | PATCH, DELETE | Rename a class or change its academic year (department is immutable); DELETE permanently removes the class and its attendance/enrollment data. |
 | `/api/admin/classes/:id/promote` | POST | Move every active student to another class in the same department (`targetClassId`); both classes need closed sessions, source history is kept, inactive accounts are skipped, and the operation is audit-logged. |
 
 Year-end promotion is an enrollment move, not an update to the class name:
@@ -134,6 +134,21 @@ Classes page. Students already enrolled in the target class only leave the
 source class; accounts that are inactive stay in the source class for manual
 follow-up. Both classes must have their attendance sessions closed first. No
 enrollment or attendance rows are deleted.
+
+Administrators can also **permanently delete** an account, class or
+department from the Accounts, Classes and Departments pages. The UI requires
+typing `DELETE` to confirm. The operation runs in one transaction and removes
+dependent rows: deleting a class removes its sessions, attendance records,
+OTP attempts, enrollments, faculty assignments and registration requests;
+deleting a department does the same for every class inside it; deleting an
+account removes its enrollments, attendance/OTP rows, faculty assignments and
+registration links. Accounts themselves are not deleted when a class or
+department is removed. Deleting an account also frees its email so a new
+account can reuse it, clears any department HOD link, and reassigns preserved
+references (for example sessions the user started) to the administrator
+performing the deletion. Audit rows tied to the deleted entity are removed and
+one deletion event with ids/counts is retained; this is the only hard-delete
+exception to the otherwise append-only audit trail.
 
 HOD (role `hod`, own department only — out-of-scope classes answer 404):
 
@@ -191,15 +206,16 @@ Audit view (admin only):
 All state-changing requests must echo the readable CSRF cookie
 (`ca_session_csrf`) in the `X-CSRF-Token` header. Every administrative
 mutation is written to the audit log with before/after snapshots (never
-passwords), and accounts are deactivated rather than deleted.
+passwords). Accounts are normally deactivated; the explicit admin hard-delete
+endpoints remove the entity and its dependent history as described above.
 
 ## Roles and scope
 
 - **Administrator** — departments (one HOD each), classes, and all staff
-  accounts: create, edit, change role, reset password, activate/deactivate.
-  Can also bulk-promote a class's students to another class in the same
-  department at year end. Also system-wide attendance reports and the
-  audit-log view.
+  accounts: create, edit, change role, reset password, activate/deactivate,
+  and permanently delete accounts/classes/departments. Can also bulk-promote
+  a class's students to another class in the same department at year end.
+  Also system-wide attendance reports and the audit-log view.
 - **HOD** — their own department only: view classes and rosters, assign and
   unassign faculty (full history kept), and review department attendance
   reports with per-class drill-downs.
@@ -234,7 +250,9 @@ passwords), and accounts are deactivated rather than deleted.
   (`nosniff`, `DENY` framing, `no-referrer`, `no-store`) and the raw OTP is
   the only secret ever returned in a response body, exactly once.
 - All sensitive mutations are audit-logged with before/after snapshots and
-  visible in the admin audit view; existing audit rows are never edited.
+  visible in the admin audit view; audit rows are append-only except for the
+  documented administrator hard-delete cleanup, which removes entity-related
+  rows and retains one ids/counts-only deletion event.
 - The migration enables row-level security on every table and revokes all
   privileges from Supabase's `anon`/`authenticated` roles, so the PostgREST
   API cannot read or write student data.

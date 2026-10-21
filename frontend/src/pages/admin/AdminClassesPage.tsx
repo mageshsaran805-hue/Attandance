@@ -2,6 +2,7 @@ import { useState } from 'react'
 import AppShell from '../../components/AppShell'
 import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
 import { SelectField, TextField } from '../../components/ui/FormField'
 import Modal from '../../components/ui/Modal'
@@ -23,6 +24,14 @@ interface ClassesResponse {
 
 interface DepartmentsResponse {
   departments: Department[]
+}
+
+interface DeleteClassResponse {
+  deleted: boolean
+  counts: {
+    sessions: number
+    attendanceRecords: number
+  }
 }
 
 type Flash = { tone: 'success' | 'error'; text: string }
@@ -86,6 +95,10 @@ export default function AdminClassesPage() {
   const [promoteSourceId, setPromoteSourceId] = useState('')
   const [promoteTargetId, setPromoteTargetId] = useState('')
   const promote = useAction()
+
+  // Permanent delete confirmation.
+  const [deleteTarget, setDeleteTarget] = useState<ClassListEntry | null>(null)
+  const deleteAction = useAction()
 
   const promoteSource =
     classes.data?.classes.find((entry) => entry.id === promoteSourceId) ?? null
@@ -171,6 +184,24 @@ export default function AdminClassesPage() {
     })
   }
 
+  const confirmDelete = () => {
+    const target = deleteTarget
+    if (!target) {
+      return
+    }
+    void deleteAction.run(async () => {
+      const response = await apiFetch<DeleteClassResponse>(`/api/admin/classes/${target.id}`, {
+        method: 'DELETE',
+      })
+      setDeleteTarget(null)
+      setFlash({
+        tone: 'success',
+        text: `Class “${target.name}” permanently deleted (${response.counts.sessions} sessions and ${response.counts.attendanceRecords} attendance records removed).`,
+      })
+      classes.reload()
+    })
+  }
+
   return (
     <AppShell>
       <PageHeader
@@ -242,6 +273,16 @@ export default function AdminClassesPage() {
                       </Button>
                       <Button variant="ghost" onClick={() => openEdit(entry)}>
                         Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="text-rose-600 hover:bg-rose-50"
+                        onClick={() => {
+                          deleteAction.reset()
+                          setDeleteTarget(entry)
+                        }}
+                      >
+                        Delete
                       </Button>
                     </div>
                   </Td>
@@ -462,6 +503,20 @@ export default function AdminClassesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        key={deleteTarget?.id ?? 'closed'}
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={`Permanently delete “${deleteTarget?.name ?? 'class'}”?`}
+        message={`This removes the class and all its sessions, attendance records, OTP attempts, enrollments, faculty assignments, registration requests and related audit entries from the database${deleteTarget && deleteTarget.studentCount > 0 ? `, including ${studentCount(deleteTarget.studentCount)} currently enrolled` : ''}. Student and staff accounts are not deleted. This cannot be undone.`}
+        confirmLabel="Delete permanently"
+        danger
+        requireText="DELETE"
+        busy={deleteAction.busy}
+        error={deleteAction.error}
+      />
     </AppShell>
   )
 }

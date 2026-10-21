@@ -89,6 +89,10 @@ export default function AdminUsersPage() {
   const statusAction = useAction()
   const [activateBusyId, setActivateBusyId] = useState<string | null>(null)
 
+  // Permanent delete confirmation.
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
+  const deleteAction = useAction()
+
   const openCreate = () => {
     create.reset()
     setCreateName('')
@@ -207,6 +211,22 @@ export default function AdminUsersPage() {
       })
       setDeactivateTarget(null)
       setFlash({ tone: 'success', text: `${target.fullName} deactivated.` })
+      users.reload()
+    })
+  }
+
+  const confirmDelete = () => {
+    const target = deleteTarget
+    if (!target) {
+      return
+    }
+    void deleteAction.run(async () => {
+      await apiFetch(`/api/admin/users/${target.id}`, { method: 'DELETE' })
+      setDeleteTarget(null)
+      setFlash({
+        tone: 'success',
+        text: `${target.fullName} was permanently deleted. ${target.email} is now available for a new account.`,
+      })
       users.reload()
     })
   }
@@ -393,6 +413,18 @@ export default function AdminUsersPage() {
                             Activate
                           </Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          className="text-rose-600 hover:bg-rose-50"
+                          onClick={() => {
+                            deleteAction.reset()
+                            setDeleteTarget(account)
+                          }}
+                          disabled={isSelf}
+                          title={isSelf ? 'You cannot delete your own account' : undefined}
+                        >
+                          Delete
+                        </Button>
                       </div>
                     </Td>
                   </tr>
@@ -590,6 +622,20 @@ export default function AdminUsersPage() {
         danger
         busy={statusAction.busy}
         error={statusAction.error}
+      />
+
+      <ConfirmDialog
+        key={deleteTarget?.id ?? 'closed'}
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={`Permanently delete ${deleteTarget?.fullName ?? 'account'}?`}
+        message={`This permanently removes ${deleteTarget?.fullName ?? 'the account'} (${deleteTarget?.email ?? 'unknown email'}) and its own data: student enrollments, attendance/OTP rows, faculty assignments and registration links. Records the account acted on (for example sessions it started or attendance it marked) are kept and reassigned to you; audit references are removed or anonymized. The email will be free to use again. If this account heads a department, that department will be left without an HOD. This cannot be undone.`}
+        confirmLabel="Delete permanently"
+        danger
+        requireText="DELETE"
+        busy={deleteAction.busy}
+        error={deleteAction.error}
       />
     </AppShell>
   )

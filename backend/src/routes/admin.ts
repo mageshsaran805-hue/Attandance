@@ -27,6 +27,11 @@ import {
   setDepartmentHod,
   updateDepartment,
 } from '../services/departments.js';
+import {
+  deleteClassCascade,
+  deleteDepartmentCascade,
+  deleteUserCascade,
+} from '../services/deletions.js';
 import { countActiveEnrollmentsForStudent, createEnrollment } from '../services/enrollments.js';
 import { promoteClassStudents } from '../services/promotions.js';
 import {
@@ -295,6 +300,49 @@ adminRouter.patch(
 );
 
 /**
+ * DELETE /api/admin/departments/:id — permanently delete a department.
+ *
+ * This is the explicit hard-delete exception to the usual history-preserving
+ * rules: every class in the department (and its sessions, records, OTP
+ * attempts, enrollments, faculty assignments and registration requests) is
+ * removed in the same transaction. Accounts are not deleted.
+ */
+adminRouter.delete(
+  '/admin/departments/:id',
+  validateParams(uuidParamSchema),
+  async (req, res) => {
+    const { id } = req.params as { id: string };
+    const actorUserId = authenticatedUserId(req);
+
+    const current = await getDepartmentById(id);
+    if (!current) {
+      throw new ApiError(404, 'Department not found.');
+    }
+
+    const counts = await withTransaction(async (client) => {
+      const deleted = await deleteDepartmentCascade(client, id);
+      if (!deleted) {
+        throw new ApiError(404, 'Department not found.');
+      }
+      await logAudit(
+        {
+          actorUserId,
+          action: 'admin.department_delete',
+          entityType: 'department',
+          entityId: id,
+          newValue: { deletedDepartmentId: id, ...deleted },
+          ip: req.ip ?? null,
+        },
+        client,
+      );
+      return deleted;
+    });
+
+    res.json({ deleted: true, counts });
+  },
+);
+
+/**
  * PUT /api/admin/departments/:id/hod — assign or clear the department's HOD.
  * Strict 1:1: an HOD who already heads another department is rejected.
  */
@@ -522,6 +570,54 @@ adminRouter.patch(
   },
 );
 
+/**
+ * DELETE /api/admin/users/:id — permanently delete an account.
+ *
+ * This frees the email for a new account. Data owned by the account is
+ * removed; references where the user acted on records that should survive are
+ * reassigned to the deleting administrator, and department HOD links are
+ * cleared. The account cannot delete itself, so at least one administrator
+ * remains.
+ */
+adminRouter.delete(
+  '/admin/users/:id',
+  validateParams(uuidParamSchema),
+  async (req, res) => {
+    const { id } = req.params as { id: string };
+    const actorUserId = authenticatedUserId(req);
+
+    if (id === actorUserId) {
+      throw new ApiError(400, 'You cannot delete your own account.');
+    }
+
+    const current = await findUserById(id);
+    if (!current) {
+      throw new ApiError(404, 'Account not found.');
+    }
+
+    const counts = await withTransaction(async (client) => {
+      const deleted = await deleteUserCascade(client, id, actorUserId);
+      if (!deleted) {
+        throw new ApiError(404, 'Account not found.');
+      }
+      await logAudit(
+        {
+          actorUserId,
+          action: 'admin.user_delete',
+          entityType: 'user',
+          entityId: id,
+          newValue: { deletedUserId: id, ...deleted },
+          ip: req.ip ?? null,
+        },
+        client,
+      );
+      return deleted;
+    });
+
+    res.json({ deleted: true, counts });
+  },
+);
+
 /** POST /api/admin/users/:id/status — activate or deactivate an account. */
 adminRouter.post(
   '/admin/users/:id/status',
@@ -737,6 +833,48 @@ adminRouter.patch(
       throw new Error('admin: class details missing right after update');
     }
     res.json({ class: details });
+  },
+);
+
+/**
+ * DELETE /api/admin/classes/:id — permanently delete a class.
+ *
+ * The class, its sessions, attendance records, OTP attempts, enrollments,
+ * faculty assignments and registration requests are removed in one
+ * transaction. Student and staff accounts are not deleted.
+ */
+adminRouter.delete(
+  '/admin/classes/:id',
+  validateParams(uuidParamSchema),
+  async (req, res) => {
+    const { id } = req.params as { id: string };
+    const actorUserId = authenticatedUserId(req);
+
+    const current = await getClassById(id);
+    if (!current) {
+      throw new ApiError(404, 'Class not found.');
+    }
+
+    const counts = await withTransaction(async (client) => {
+      const deleted = await deleteClassCascade(client, id);
+      if (!deleted) {
+        throw new ApiError(404, 'Class not found.');
+      }
+      await logAudit(
+        {
+          actorUserId,
+          action: 'admin.class_delete',
+          entityType: 'class',
+          entityId: id,
+          newValue: { deletedClassId: id, ...deleted },
+          ip: req.ip ?? null,
+        },
+        client,
+      );
+      return deleted;
+    });
+
+    res.json({ deleted: true, counts });
   },
 );
 

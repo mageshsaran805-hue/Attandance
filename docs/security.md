@@ -107,8 +107,11 @@ follow-up.
 - Every sensitive mutation is audit-logged with actor, entity, before/after
   snapshots and IP; OTP codes and password material never appear.
 - The Phase 5 admin view (`GET /api/admin/audit`) is admin-only, read-only,
-  filtered and paginated. Rows are never updated or deleted by the
-  application.
+  filtered and paginated. Rows are append-only during normal operation. The
+  one exception is the documented administrator hard-delete: it removes audit
+  rows tied to the deleted entity, nulls actor references of a deleted
+  account, and writes one deletion event containing only ids and counts (no
+  email, password or other personal snapshot).
 - Failed logins with unknown emails are recorded with a null actor. Public
   registration submissions (`registration.submit`, Phase 6) are also logged
   with a null actor; the student's chosen password appears only as its

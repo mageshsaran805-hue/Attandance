@@ -81,6 +81,19 @@ when backend behaviour changed. Report only results that were actually observed.
   reactivates and updates that account (same id/history) instead of inserting
   a duplicate; active duplicates are rejected. Role changes during reuse obey
   the same active-record guards as the role endpoint.
+- Admin hard-delete semantics: `DELETE /api/admin/users/:id`,
+  `/api/admin/classes/:id` and `/api/admin/departments/:id` are the explicit
+  exception to the history-preserving rules. Each runs a transactional
+  cascade: deleting a class removes its sessions, attendance records, OTP
+  attempts, enrollments, faculty assignments and registration requests;
+  deleting a department does the same for every class inside it; deleting an
+  account removes its enrollments, attendance/OTP rows, faculty assignments
+  and registration links, clears any HOD link, reassigns preserved actor
+  references (sessions started, manual marks, calendar entries, assignments
+  made, reviews performed) to the deleting admin, and frees the email. Audit
+  rows tied to the deleted entity are removed, deleted-user actor references
+  are nulled, and one deletion event with ids/counts only is retained. The UI
+  requires typing `DELETE`. Never use this path for routine cleanup.
 - The migration enables RLS and revokes `anon`/`authenticated` grants —
   keep doing that in every future migration that creates tables.
 - The Vite dev proxy forwards `/api/*` from :5173 to :4000
@@ -165,3 +178,10 @@ when backend behaviour changed. Report only results that were actually observed.
   created, inactive accounts are skipped and reported, either class having an
   open session blocks the move, and the whole operation is audit-logged. No
   schema change; attendance history is untouched.
+- **Post-plan — admin hard delete (done):** admin-only permanent deletion of
+  accounts, classes and departments, exposed on the Accounts, Classes and
+  Departments pages with type-`DELETE` confirmation. Transactional cascades
+  remove dependent rows, free account emails, clear/reassign references, and
+  clean up entity-related audit rows while retaining one ids/counts-only
+  deletion event. Migration `0006_admin_hard_delete.sql` updates the affected
+  schema comments only.

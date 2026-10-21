@@ -80,6 +80,10 @@ class ApiSession {
   put(path: string, body: unknown) {
     return request(app).put(path).set('Cookie', this.cookie).set('X-CSRF-Token', this.csrf).send(body);
   }
+
+  delete(path: string) {
+    return request(app).delete(path).set('Cookie', this.cookie).set('X-CSRF-Token', this.csrf);
+  }
 }
 
 async function loginAs(targetEmail: string): Promise<ApiSession> {
@@ -187,6 +191,9 @@ describe.skipIf(!enabled)('administration integration (real database)', () => {
       [classIds],
     );
     await pool.query('DELETE FROM attendance_sessions WHERE class_id = ANY($1::uuid[])', [classIds]);
+    await pool.query('DELETE FROM student_registrations WHERE class_id = ANY($1::uuid[])', [
+      classIds,
+    ]);
     await pool.query('DELETE FROM enrollments WHERE class_id = ANY($1::uuid[])', [classIds]);
     await pool.query('DELETE FROM class_faculty WHERE class_id = ANY($1::uuid[])', [classIds]);
     await pool.query('DELETE FROM classes WHERE id = ANY($1::uuid[])', [classIds]);
@@ -743,5 +750,322 @@ describe.skipIf(!enabled)('administration integration (real database)', () => {
            OR new_value::text ILIKE '%argon2%' OR old_value::text ILIKE '%argon2%'`,
     );
     expect(leak.rows[0]?.count).toBe(0);
+  });
+
+  it('permanently deletes an account, reassigns preserved references and frees the email', async () => {
+    const admin = await loginAs(adminEmail);
+    const pool = getPool();
+    const targetEmail = email('hard-delete-user');
+
+    const first = await admin.post('/api/admin/users', {
+      fullName: 'IT Hard Delete Faculty',
+      email: targetEmail,
+      role: 'faculty',
+      password: PASSWORD,
+    });
+    expect(first.status).toBe(201);
+    const targetId = first.body.user.id as string;
+    created.userIds.push(targetId);
+
+    await pool.query(
+      'INSERT INTO class_faculty (class_id, faculty_user_id, assigned_by) VALUES ($1, $2, $3)',
+      [classA1Id, targetId, adminId],
+    );
+    const session = await pool.query<{ id: string }>(
+      `INSERT INTO attendance_sessions (class_id, session_date, started_by)
+       VALUES ($1, '2026-10-20', $2)
+       RETURNING id`,
+      [classA1Id, targetId],
+    );
+    const sessionId = session.rows[0]?.id ?? '';
+    const record = await pool.query<{ id: string }>(
+      `INSERT INTO attendance_records (session_id, student_user_id, status, method, marked_by)
+       VALUES ($1, $2, 'present', 'manual', $3)
+       RETURNING id`,
+      [sessionId, student1Id, targetId],
+    );
+    const recordId = record.rows[0]?.id ?? '';
+    expect(sessionId).not.toBe('');
+    expect(recordId).not.toBe('');
+
+    const faculty = await loginAs(faculty1Email);
+    const denied = await faculty.delete(`/api/admin/users/${targetId}`);
+    expect(denied.status).toBe(403);
+
+    const self = await admin.delete(`/api/admin/users/${adminId}`);
+    expect(self.status).toBe(400);
+
+    const deleted = await admin.delete(`/api/admin/users/${targetId}`);
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.deleted).toBe(true);
+    expect(deleted.body.counts.facultyAssignments).toBe(1);
+    expect(deleted.body.counts.reassignedSessions).toBe(1);
+    expect(deleted.body.counts.reassignedRecords).toBe(1);
+
+    const user = await pool.query('SELECT id FROM users WHERE id = $1', [targetId]);
+    expect(user.rowCount).toBe(0);
+
+    const assignment = await pool.query(
+      'SELECT id FROM class_faculty WHERE faculty_user_id = $1',
+      [targetId],
+    );
+    expect(assignment.rowCount).toBe(0);
+
+    const sessionRow = await pool.query<{ started_by: string }>(
+      'SELECT started_by FROM attendance_sessions WHERE id = $1',
+      [sessionId],
+    );
+    expect(sessionRow.rows[0]?.started_by).toBe(adminId);
+
+    const recordRow = await pool.query<{ marked_by: string }>(
+      'SELECT marked_by FROM attendance_records WHERE id = $1',
+      [recordId],
+    );
+    expect(recordRow.rows[0]?.marked_by).toBe(adminId);
+
+    const audit = await pool.query<{ action: string }>(
+      'SELECT action FROM audit_log WHERE entity_id = $1 ORDER BY id',
+      [targetId],
+    );
+    expect(audit.rows.map((row) => row.action)).toEqual(['admin.user_delete']);
+
+    const emailLeak = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM audit_log
+        WHERE lower(new_value->>'email') = lower($1)
+           OR lower(old_value->>'email') = lower($1)
+           OR lower(new_value->>'attemptedEmail') = lower($1)
+           OR lower(old_value->>'attemptedEmail') = lower($1)`,
+      [targetEmail],
+    );
+    expect(emailLeak.rows[0]?.count).toBe(0);
+
+    const again = await admin.post('/api/admin/users', {
+      fullName: 'IT Hard Delete Faculty Reused',
+      email: targetEmail,
+      role: 'faculty',
+      password: PASSWORD,
+    });
+    expect(again.status).toBe(201);
+    expect(again.body.user.id).not.toBe(targetId);
+    created.userIds.push(again.body.user.id);
+  });
+
+  it('permanently deletes a class with its sessions, records and registrations', async () => {
+    const admin = await loginAs(adminEmail);
+    const pool = getPool();
+
+    const createdClass = await admin.post('/api/admin/classes', {
+      departmentId: deptAId,
+      name: `IT QA Hard Delete Class ${runId}`,
+      academicYear: '2026-27',
+    });
+    expect(createdClass.status).toBe(201);
+    const classId = createdClass.body.class.id as string;
+    created.classIds.push(classId);
+
+    await pool.query('INSERT INTO enrollments (class_id, student_user_id) VALUES ($1, $2)', [
+      classId,
+      student1Id,
+    ]);
+    await pool.query(
+      'INSERT INTO class_faculty (class_id, faculty_user_id, assigned_by) VALUES ($1, $2, $3)',
+      [classId, faculty2Id, adminId],
+    );
+    const session = await pool.query<{ id: string }>(
+      `INSERT INTO attendance_sessions (class_id, session_date, started_by)
+       VALUES ($1, '2026-10-19', $2)
+       RETURNING id`,
+      [classId, adminId],
+    );
+    const sessionId = session.rows[0]?.id ?? '';
+    await pool.query(
+      `INSERT INTO attendance_records (session_id, student_user_id, status, method, marked_by)
+       VALUES ($1, $2, 'present', 'manual', $3)`,
+      [sessionId, student1Id, adminId],
+    );
+    await pool.query(
+      'INSERT INTO otp_attempts (session_id, student_user_id, success) VALUES ($1, $2, true)',
+      [sessionId, student1Id],
+    );
+    const registrationEmail = email('hard-delete-reg');
+    await pool.query(
+      `INSERT INTO student_registrations
+         (full_name, email, register_number, class_id, password_hash)
+       VALUES ('IT Hard Delete Registration', $1, $2, $3, 'integration-test-hash')`,
+      [registrationEmail, `REG-${runId}-DEL`, classId],
+    );
+
+    const deleted = await admin.delete(`/api/admin/classes/${classId}`);
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.counts).toMatchObject({
+      sessions: 1,
+      attendanceRecords: 1,
+      otpAttempts: 1,
+      enrollments: 1,
+      facultyAssignments: 1,
+      registrations: 1,
+    });
+
+    const classRow = await pool.query('SELECT id FROM classes WHERE id = $1', [classId]);
+    expect(classRow.rowCount).toBe(0);
+    const sessionRow = await pool.query('SELECT id FROM attendance_sessions WHERE id = $1', [
+      sessionId,
+    ]);
+    expect(sessionRow.rowCount).toBe(0);
+    const recordRow = await pool.query(
+      'SELECT id FROM attendance_records WHERE session_id = $1',
+      [sessionId],
+    );
+    expect(recordRow.rowCount).toBe(0);
+    const otpRow = await pool.query('SELECT id FROM otp_attempts WHERE session_id = $1', [
+      sessionId,
+    ]);
+    expect(otpRow.rowCount).toBe(0);
+    const enrollmentRow = await pool.query('SELECT id FROM enrollments WHERE class_id = $1', [
+      classId,
+    ]);
+    expect(enrollmentRow.rowCount).toBe(0);
+    const assignmentRow = await pool.query('SELECT id FROM class_faculty WHERE class_id = $1', [
+      classId,
+    ]);
+    expect(assignmentRow.rowCount).toBe(0);
+    const registrationRow = await pool.query(
+      'SELECT id FROM student_registrations WHERE class_id = $1',
+      [classId],
+    );
+    expect(registrationRow.rowCount).toBe(0);
+
+    const student = await pool.query('SELECT id FROM users WHERE id = $1', [student1Id]);
+    expect(student.rowCount).toBe(1);
+    const faculty = await pool.query('SELECT id FROM users WHERE id = $1', [faculty2Id]);
+    expect(faculty.rowCount).toBe(1);
+
+    const audit = await pool.query<{ action: string }>(
+      'SELECT action FROM audit_log WHERE entity_id = $1 ORDER BY id',
+      [classId],
+    );
+    expect(audit.rows.map((row) => row.action)).toEqual(['admin.class_delete']);
+  });
+
+  it('permanently deletes a department and its classes without deleting accounts', async () => {
+    const admin = await loginAs(adminEmail);
+    const pool = getPool();
+
+    const createdDept = await admin.post('/api/admin/departments', {
+      name: `IT QA Hard Delete Dept ${runId}`,
+      code: `D${runId.slice(0, 4)}`,
+    });
+    expect(createdDept.status).toBe(201);
+    const departmentId = createdDept.body.department.id as string;
+    created.deptIds.push(departmentId);
+
+    const createdClass = await admin.post('/api/admin/classes', {
+      departmentId,
+      name: `IT QA Hard Delete Dept Class ${runId}`,
+      academicYear: '2026-27',
+    });
+    expect(createdClass.status).toBe(201);
+    const classId = createdClass.body.class.id as string;
+    created.classIds.push(classId);
+
+    await pool.query('INSERT INTO enrollments (class_id, student_user_id) VALUES ($1, $2)', [
+      classId,
+      student1Id,
+    ]);
+    const session = await pool.query<{ id: string }>(
+      `INSERT INTO attendance_sessions (class_id, session_date, started_by)
+       VALUES ($1, '2026-10-18', $2)
+       RETURNING id`,
+      [classId, adminId],
+    );
+    const sessionId = session.rows[0]?.id ?? '';
+    await pool.query(
+      `INSERT INTO attendance_records (session_id, student_user_id, status, method, marked_by)
+       VALUES ($1, $2, 'present', 'manual', $3)`,
+      [sessionId, student1Id, adminId],
+    );
+
+    const deleted = await admin.delete(`/api/admin/departments/${departmentId}`);
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.counts).toMatchObject({
+      classes: 1,
+      sessions: 1,
+      attendanceRecords: 1,
+      enrollments: 1,
+    });
+
+    const departmentRow = await pool.query('SELECT id FROM departments WHERE id = $1', [
+      departmentId,
+    ]);
+    expect(departmentRow.rowCount).toBe(0);
+    const classRow = await pool.query('SELECT id FROM classes WHERE id = $1', [classId]);
+    expect(classRow.rowCount).toBe(0);
+    const sessionRow = await pool.query('SELECT id FROM attendance_sessions WHERE id = $1', [
+      sessionId,
+    ]);
+    expect(sessionRow.rowCount).toBe(0);
+    const recordRow = await pool.query(
+      'SELECT id FROM attendance_records WHERE session_id = $1',
+      [sessionId],
+    );
+    expect(recordRow.rowCount).toBe(0);
+    const enrollmentRow = await pool.query('SELECT id FROM enrollments WHERE class_id = $1', [
+      classId,
+    ]);
+    expect(enrollmentRow.rowCount).toBe(0);
+
+    const student = await pool.query('SELECT id FROM users WHERE id = $1', [student1Id]);
+    expect(student.rowCount).toBe(1);
+
+    const audit = await pool.query<{ action: string }>(
+      'SELECT action FROM audit_log WHERE entity_id = $1 ORDER BY id',
+      [departmentId],
+    );
+    expect(audit.rows.map((row) => row.action)).toEqual(['admin.department_delete']);
+  });
+
+  it('clears a department HOD link when deleting the HOD account', async () => {
+    const admin = await loginAs(adminEmail);
+    const pool = getPool();
+
+    const createdHod = await admin.post('/api/admin/users', {
+      fullName: 'IT Hard Delete HOD',
+      email: email('hard-delete-hod'),
+      role: 'hod',
+      password: PASSWORD,
+    });
+    expect(createdHod.status).toBe(201);
+    const hodId = createdHod.body.user.id as string;
+    created.userIds.push(hodId);
+
+    const createdDept = await admin.post('/api/admin/departments', {
+      name: `IT QA Hard Delete HOD Dept ${runId}`,
+      code: `H${runId.slice(0, 4)}`,
+    });
+    expect(createdDept.status).toBe(201);
+    const departmentId = createdDept.body.department.id as string;
+    created.deptIds.push(departmentId);
+
+    const assigned = await admin.put(`/api/admin/departments/${departmentId}/hod`, {
+      hodUserId: hodId,
+    });
+    expect(assigned.status).toBe(200);
+    expect(assigned.body.department.hodUserId).toBe(hodId);
+
+    const deleted = await admin.delete(`/api/admin/users/${hodId}`);
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.counts.clearedHodDepartments).toBe(1);
+
+    const department = await pool.query<{ hod_user_id: string | null }>(
+      'SELECT hod_user_id FROM departments WHERE id = $1',
+      [departmentId],
+    );
+    expect(department.rows[0]?.hod_user_id).toBeNull();
+
+    const user = await pool.query('SELECT id FROM users WHERE id = $1', [hodId]);
+    expect(user.rowCount).toBe(0);
+
+    const cleanup = await admin.delete(`/api/admin/departments/${departmentId}`);
+    expect(cleanup.status).toBe(200);
   });
 });

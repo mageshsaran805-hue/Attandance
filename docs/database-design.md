@@ -62,8 +62,12 @@ required (`gen_random_uuid()` is built in; no extensions needed).
 - **Email**: unique, case-insensitive via a unique index on `lower(email)`.
 - **`updated_at`**: maintained by a shared `set_updated_at()` trigger function.
 - **History over deletion** (`ON DELETE RESTRICT` everywhere): users are
-  deactivated (`is_active`) rather than deleted; enrollment and faculty
-  assignments close instead of being removed; audit rows are append-only.
+  normally deactivated (`is_active`) rather than deleted; enrollment and
+  faculty assignments close instead of being removed; audit rows are
+  append-only. The explicit administrator hard-delete endpoints are the one
+  exception: they clear/reassign every RESTRICT dependency in one transaction,
+  remove entity-related audit rows, and keep a single ids/counts-only deletion
+  event. Deleting an account frees its email for reuse.
 - **Indexes**: every foreign key is indexed (directly or as a unique-index
   prefix); extra indexes noted per table.
 - **Role integrity triggers**: `enrollments`, `class_faculty`,
@@ -240,12 +244,14 @@ stored: **no OTP values (valid or invalid) are ever written**.
 
 Append-only history for sensitive mutations (manual marks, corrections,
 session start/close, faculty assignment, account/permission changes, login
-events).
+events). The one exception is the administrator hard-delete cleanup, which
+removes rows tied to the deleted entity, nulls a deleted account's actor
+references, and keeps one ids/counts-only deletion event.
 
 | Column | Notes |
 | --- | --- |
 | `id` | bigint identity, PK |
-| `actor_user_id` | FK → users; **NULL only for events without an authenticated actor** (e.g. failed login with unknown email) |
+| `actor_user_id` | FK → users; **NULL for events without an authenticated actor** (e.g. failed login with unknown email) or after the acting account is hard-deleted |
 | `action` | text, e.g. `auth.login`, `session.close`, `class.faculty_assign` |
 | `entity_type`, `entity_id` | what was changed (`entity_id` is text for flexibility) |
 | `old_value`, `new_value` | `jsonb` snapshots; **never** hashes, tokens or plaintext OTPs |
@@ -300,6 +306,13 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
    promotion's class lock. Inactive accounts are reported and left in the
    source class for manual follow-up; no attendance or enrollment history is
    deleted.
+10. **Administrator hard-delete is the explicit exception** — deleting an
+    account, class or department locks the target row, clears or reassigns
+    every RESTRICT dependency, removes entity-related audit rows, and deletes
+    the target in one transaction. Deleting an account frees its email;
+    deleting a class/department removes its sessions, records, OTP attempts,
+    enrollments, assignments and registration requests but keeps the accounts
+    themselves. One ids/counts-only audit event is retained.
 
 ## Access-control matrix (target behaviour)
 
@@ -308,6 +321,7 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
 | Departments CRUD | ✅ | view own | – | – |
 | HOD/faculty/student accounts | ✅ | students of own dept (via class) | students of assigned classes | – |
 | Classes CRUD | ✅ | view own department | view assigned | – |
+| Hard-delete accounts/classes/departments | ✅ | – | – | – |
 | Promote students between classes | ✅ | – | – | – |
 | Faculty assignment | ✅ (any) | own department | – | – |
 | Open/close sessions, manual marks | – | – | assigned classes | – |

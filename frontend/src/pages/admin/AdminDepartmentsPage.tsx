@@ -2,6 +2,7 @@ import { useState } from 'react'
 import AppShell from '../../components/AppShell'
 import Alert from '../../components/ui/Alert'
 import Button from '../../components/ui/Button'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
 import { SelectField, TextField } from '../../components/ui/FormField'
 import Modal from '../../components/ui/Modal'
@@ -18,6 +19,13 @@ interface DepartmentsResponse {
 
 interface UsersResponse {
   users: AdminUser[]
+}
+
+interface DeleteDepartmentResponse {
+  deleted: boolean
+  counts: {
+    classes: number
+  }
 }
 
 type Flash = { tone: 'success' | 'error'; text: string }
@@ -44,6 +52,10 @@ export default function AdminDepartmentsPage() {
   const [hodChoice, setHodChoice] = useState('')
   const hodAction = useAction()
   const hods = useFetch<UsersResponse>(assigning ? '/api/admin/users?role=hod' : null)
+
+  // Permanent delete confirmation.
+  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null)
+  const deleteAction = useAction()
 
   const openCreate = () => {
     create.reset()
@@ -110,6 +122,25 @@ export default function AdminDepartmentsPage() {
           hodChoice === ''
             ? `HOD cleared for ${target.name}.`
             : `HOD updated for ${target.name}.`,
+      })
+      departments.reload()
+    })
+  }
+
+  const confirmDelete = () => {
+    const target = deleteTarget
+    if (!target) {
+      return
+    }
+    void deleteAction.run(async () => {
+      const response = await apiFetch<DeleteDepartmentResponse>(
+        `/api/admin/departments/${target.id}`,
+        { method: 'DELETE' },
+      )
+      setDeleteTarget(null)
+      setFlash({
+        tone: 'success',
+        text: `Department “${target.name}” permanently deleted (${response.counts.classes} classes removed).`,
       })
       departments.reload()
     })
@@ -185,6 +216,16 @@ export default function AdminDepartmentsPage() {
                       </Button>
                       <Button variant="ghost" onClick={() => openHod(department)}>
                         HOD
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="text-rose-600 hover:bg-rose-50"
+                        onClick={() => {
+                          deleteAction.reset()
+                          setDeleteTarget(department)
+                        }}
+                      >
+                        Delete
                       </Button>
                     </div>
                   </Td>
@@ -320,6 +361,20 @@ export default function AdminDepartmentsPage() {
           </form>
         )}
       </Modal>
+
+      <ConfirmDialog
+        key={deleteTarget?.id ?? 'closed'}
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={`Permanently delete “${deleteTarget?.name ?? 'department'}”?`}
+        message={`This removes the department and every class inside it (${deleteTarget?.classCount ?? 0} ${deleteTarget?.classCount === 1 ? 'class' : 'classes'}) from the database, including all sessions, attendance records, OTP attempts, enrollments, faculty assignments, registration requests and related audit entries. Accounts, including the HOD, are not deleted. This cannot be undone.`}
+        confirmLabel="Delete permanently"
+        danger
+        requireText="DELETE"
+        busy={deleteAction.busy}
+        error={deleteAction.error}
+      />
     </AppShell>
   )
 }
