@@ -154,3 +154,9 @@ when backend behaviour changed. Report only results that were actually observed.
   (migration 0005) with faculty-only marking, excused percentage math and
   report columns; web-app manifest + icons (no service worker, by design) so
   the site can be added to phone home screens.
+- **Post-plan — year-end promotion (done):** admin-only bulk move of active
+  students from one class to another class in the same department, exposed on
+  the Classes page. Source enrollments are soft-closed, target enrollments are
+  created, inactive accounts are skipped and reported, either class having an
+  open session blocks the move, and the whole operation is audit-logged. No
+  schema change; attendance history is untouched.

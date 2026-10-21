@@ -56,6 +56,24 @@ export interface ClassDetails {
   studentCount: number
 }
 
+export interface PromotionClassSummary {
+  id: string
+  name: string
+  academicYear: string
+}
+
+export interface PromotionResult {
+  sourceClass: PromotionClassSummary
+  targetClass: PromotionClassSummary
+  promotedCount: number
+  alreadyEnrolledCount: number
+  skippedInactiveCount: number
+}
+
+export interface PromotionResponse {
+  promotion: PromotionResult
+}
+
 export interface ClassFacultySummary {
   id: string
   facultyUserId: string

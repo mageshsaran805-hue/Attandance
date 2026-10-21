@@ -176,6 +176,17 @@ describe.skipIf(!enabled)('administration integration (real database)', () => {
       'DELETE FROM audit_log WHERE actor_user_id = ANY($1::uuid[]) OR entity_id = ANY($2::text[])',
       [userIds, entityIds],
     );
+    await pool.query(
+      `DELETE FROM otp_attempts
+        WHERE session_id IN (SELECT id FROM attendance_sessions WHERE class_id = ANY($1::uuid[]))`,
+      [classIds],
+    );
+    await pool.query(
+      `DELETE FROM attendance_records
+        WHERE session_id IN (SELECT id FROM attendance_sessions WHERE class_id = ANY($1::uuid[]))`,
+      [classIds],
+    );
+    await pool.query('DELETE FROM attendance_sessions WHERE class_id = ANY($1::uuid[])', [classIds]);
     await pool.query('DELETE FROM enrollments WHERE class_id = ANY($1::uuid[])', [classIds]);
     await pool.query('DELETE FROM class_faculty WHERE class_id = ANY($1::uuid[])', [classIds]);
     await pool.query('DELETE FROM classes WHERE id = ANY($1::uuid[])', [classIds]);
@@ -434,6 +445,172 @@ describe.skipIf(!enabled)('administration integration (real database)', () => {
     expect(selfDeactivate.status).toBe(400);
   });
 
+  it('promotes a class into another class in the same department', async () => {
+    const admin = await loginAs(adminEmail);
+    const pool = getPool();
+
+    const source = await admin.post('/api/admin/classes', {
+      departmentId: deptAId,
+      name: `IT QA Promo Source ${runId}`,
+      academicYear: '2026-27',
+    });
+    expect(source.status).toBe(201);
+    const sourceId = source.body.class.id as string;
+    created.classIds.push(sourceId);
+
+    const target = await admin.post('/api/admin/classes', {
+      departmentId: deptAId,
+      name: `IT QA Promo Target ${runId}`,
+      academicYear: '2027-28',
+    });
+    expect(target.status).toBe(201);
+    const targetId = target.body.class.id as string;
+    created.classIds.push(targetId);
+
+    const empty = await admin.post('/api/admin/classes', {
+      departmentId: deptAId,
+      name: `IT QA Promo Empty ${runId}`,
+      academicYear: '2027-28',
+    });
+    expect(empty.status).toBe(201);
+    const emptyId = empty.body.class.id as string;
+    created.classIds.push(emptyId);
+
+    const passwordHash = await hashPassword(PASSWORD);
+    const promo1Email = email('promo1');
+    const promo2Email = email('promo2');
+    const promo3Email = email('promo3');
+    const students = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (email, password_hash, full_name, role, is_active) VALUES
+         ($1, $4, 'IT Promo Student One', 'student', true),
+         ($2, $4, 'IT Promo Student Two', 'student', true),
+         ($3, $4, 'IT Promo Student Three', 'student', true)
+       RETURNING id, email`,
+      [promo1Email, promo2Email, promo3Email, passwordHash],
+    );
+    const byEmail = new Map(students.rows.map((row) => [row.email, row.id]));
+    const promo1Id = byEmail.get(promo1Email) ?? '';
+    const promo2Id = byEmail.get(promo2Email) ?? '';
+    const promo3Id = byEmail.get(promo3Email) ?? '';
+    for (const id of [promo1Id, promo2Id, promo3Id]) {
+      expect(id).not.toBe('');
+    }
+    created.userIds.push(promo1Id, promo2Id, promo3Id);
+
+    await pool.query(
+      `INSERT INTO enrollments (class_id, student_user_id) VALUES
+         ($1, $2), ($1, $3), ($1, $4)`,
+      [sourceId, promo1Id, promo2Id, promo3Id],
+    );
+    await pool.query(
+      `INSERT INTO enrollments (class_id, student_user_id) VALUES ($1, $2)`,
+      [targetId, promo2Id],
+    );
+    // Inactive accounts cannot receive a new enrollment; they are reported
+    // and left in the source class for manual follow-up.
+    await pool.query('UPDATE users SET is_active = false WHERE id = $1', [promo3Id]);
+
+    const openSession = await pool.query<{ id: string }>(
+      `INSERT INTO attendance_sessions (class_id, session_date, started_by)
+       VALUES ($1, CURRENT_DATE, $2) RETURNING id`,
+      [sourceId, adminId],
+    );
+    const openSessionId = openSession.rows[0]?.id ?? '';
+    expect(openSessionId).not.toBe('');
+    const blockedByOpenSession = await admin.post(`/api/admin/classes/${sourceId}/promote`, {
+      targetClassId: targetId,
+    });
+    expect(blockedByOpenSession.status).toBe(409);
+    expect(blockedByOpenSession.body.error).toMatch(/open attendance session/);
+    await pool.query('DELETE FROM attendance_sessions WHERE id = $1', [openSessionId]);
+
+    const hod = await loginAs(hodAEmail);
+    const denied = await hod.post(`/api/admin/classes/${sourceId}/promote`, {
+      targetClassId: targetId,
+    });
+    expect(denied.status).toBe(403);
+
+    const crossDepartment = await admin.post(`/api/admin/classes/${sourceId}/promote`, {
+      targetClassId: classB1Id,
+    });
+    expect(crossDepartment.status).toBe(400);
+    expect(crossDepartment.body.error).toMatch(/same department/);
+
+    const sameClass = await admin.post(`/api/admin/classes/${sourceId}/promote`, {
+      targetClassId: sourceId,
+    });
+    expect(sameClass.status).toBe(400);
+
+    const noStudents = await admin.post(`/api/admin/classes/${emptyId}/promote`, {
+      targetClassId: targetId,
+    });
+    expect(noStudents.status).toBe(409);
+
+    const promoted = await admin.post(`/api/admin/classes/${sourceId}/promote`, {
+      targetClassId: targetId,
+    });
+    expect(promoted.status).toBe(200);
+    expect(promoted.body.promotion).toMatchObject({
+      sourceClass: { id: sourceId, name: `IT QA Promo Source ${runId}`, academicYear: '2026-27' },
+      targetClass: { id: targetId, name: `IT QA Promo Target ${runId}`, academicYear: '2027-28' },
+      promotedCount: 1,
+      alreadyEnrolledCount: 1,
+      skippedInactiveCount: 1,
+    });
+
+    const sourceActive = await pool.query<{ student_user_id: string }>(
+      `SELECT student_user_id FROM enrollments
+        WHERE class_id = $1 AND unenrolled_at IS NULL`,
+      [sourceId],
+    );
+    expect(sourceActive.rows.map((row) => row.student_user_id)).toEqual([promo3Id]);
+
+    const targetActive = await pool.query<{ student_user_id: string }>(
+      `SELECT student_user_id FROM enrollments
+        WHERE class_id = $1 AND unenrolled_at IS NULL`,
+      [targetId],
+    );
+    expect(new Set(targetActive.rows.map((row) => row.student_user_id))).toEqual(
+      new Set([promo1Id, promo2Id]),
+    );
+
+    const sourceHistory = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM enrollments
+        WHERE class_id = $1 AND unenrolled_at IS NOT NULL`,
+      [sourceId],
+    );
+    expect(sourceHistory.rows[0]?.count).toBe(2);
+
+    const audit = await pool.query<{
+      new_value: {
+        promotedCount: number;
+        alreadyEnrolledCount: number;
+        skippedInactiveCount: number;
+        promotedStudentUserIds: string[];
+        alreadyEnrolledStudentUserIds: string[];
+        skippedInactiveStudentUserIds: string[];
+      };
+    }>(
+      `SELECT new_value FROM audit_log
+        WHERE action = 'admin.class_promote' AND entity_id = $1
+        ORDER BY id DESC LIMIT 1`,
+      [targetId],
+    );
+    expect(audit.rows[0]?.new_value).toMatchObject({
+      promotedCount: 1,
+      alreadyEnrolledCount: 1,
+      skippedInactiveCount: 1,
+      promotedStudentUserIds: [promo1Id],
+      alreadyEnrolledStudentUserIds: [promo2Id],
+      skippedInactiveStudentUserIds: [promo3Id],
+    });
+
+    const retry = await admin.post(`/api/admin/classes/${sourceId}/promote`, {
+      targetClassId: targetId,
+    });
+    expect(retry.status).toBe(409);
+  });
+
   it('deactivates accounts immediately and writes a credential-free audit trail', async () => {
     const admin = await loginAs(adminEmail);
 
@@ -480,6 +657,7 @@ describe.skipIf(!enabled)('administration integration (real database)', () => {
       'admin.user_status',
       'admin.user_role_change',
       'admin.class_update',
+      'admin.class_promote',
       'hod.faculty_assign',
       'hod.faculty_unassign',
       'faculty.student_create',

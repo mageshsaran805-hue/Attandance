@@ -42,7 +42,7 @@ leak.
 
 | Role | Scope |
 | --- | --- |
-| admin | departments, classes, staff accounts, system reports, audit log |
+| admin | departments, classes (including bulk student promotion), staff accounts, system reports, audit log |
 | hod | own department only (classes, assignments, reports, class drill-down) |
 | faculty | actively assigned classes only (rosters, sessions, reports) |
 | student | own enrollments and own records only (today, history) |
@@ -51,6 +51,14 @@ Scope helpers live in `src/services/classes.ts` (`getClassForFaculty`,
 `getClassForDepartment`) and every route resolves them before touching data.
 Integration tests cover cross-role and cross-department attempts (403 on
 wrong role, 404 out of scope).
+
+Bulk promotion is administrator-only. It locks both classes and the source
+enrollment rows, rejects cross-department targets, refuses to run while either
+class has an open attendance session, does not accept arbitrary student ids,
+and never deletes attendance or enrollment history. Opening a session takes a
+class share lock, so session-open and promotion cannot interleave. Inactive
+accounts are skipped and reported; the entire operation is audit-logged as
+`admin.class_promote`.
 
 ## 4. Input validation and injection
 

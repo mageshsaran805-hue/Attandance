@@ -280,6 +280,12 @@ export async function openSession(
   },
   client: PoolClient,
 ): Promise<AttendanceSessionSummary> {
+  // A promotion takes FOR UPDATE on both class rows before checking for open
+  // sessions. Taking a share lock here means the two operations serialize:
+  // either the session opens first (and the promotion refuses), or the
+  // promotion finishes first (and the session opens for the new roster).
+  await client.query('SELECT id FROM classes WHERE id = $1 FOR SHARE', [input.classId]);
+
   const { rows } = await client.query<{ id: string }>(
     // Expiry is computed with the database clock so the lockout window
     // (otp_expires_at - TTL, see countFailedOtpAttempts) lines up with

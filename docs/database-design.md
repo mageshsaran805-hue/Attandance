@@ -21,6 +21,12 @@ required (`gen_random_uuid()` is built in; no extensions needed).
   one faculty member cannot hold two active assignments for the same class.
 - **Enrollment changes are soft** — `unenrolled_at` keeps the historical row;
   a partial unique index prevents duplicate *active* enrollment.
+- **Bulk promotion moves enrollments, never history** — promoting a class
+  closes its active enrollment rows and creates active rows in the target
+  class in one transaction. Source and target must be in the same department
+  and neither may have an open attendance session; inactive accounts are
+  skipped, and students already active in the target only leave the source.
+  Attendance rows reference sessions, so they are never rewritten or deleted.
 - **Attendance**: one session per class per IST calendar date; "pending" is
   the absence of a record while the session is open; closing materializes
   absent records for everyone still pending.
@@ -284,6 +290,16 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
    admin approve endpoint locks the pending row (`FOR UPDATE`), creates the
    account and enrollment, and marks the registration approved in one
    transaction with an audit row; concurrent reviews settle exactly once.
+9. **Promotion is transactional and soft** — the endpoint locks both class
+   rows and the source enrollment rows, then inserts target enrollments and
+   closes source enrollments in one transaction. A partial unique conflict
+   means the student was already in the target class and is treated as such.
+   Either class having an open attendance session blocks the move, because
+   closing that session later would miss promoted students or mis-mark new
+   ones. Session opening takes a class share lock, so it serializes with the
+   promotion's class lock. Inactive accounts are reported and left in the
+   source class for manual follow-up; no attendance or enrollment history is
+   deleted.
 
 ## Access-control matrix (target behaviour)
 
@@ -292,6 +308,7 @@ Created and maintained by the migration runner: `filename` (PK), `checksum`
 | Departments CRUD | ✅ | view own | – | – |
 | HOD/faculty/student accounts | ✅ | students of own dept (via class) | students of assigned classes | – |
 | Classes CRUD | ✅ | view own department | view assigned | – |
+| Promote students between classes | ✅ | – | – | – |
 | Faculty assignment | ✅ (any) | own department | – | – |
 | Open/close sessions, manual marks | – | – | assigned classes | – |
 | Calendar (non-working days) | manage + view | view | view | view |

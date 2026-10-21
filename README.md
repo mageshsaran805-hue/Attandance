@@ -45,7 +45,7 @@ backend/                 Express + TypeScript API
   src/lib/               password hashing, tokens, CSRF, cookies, errors, OTP, timezone dates, shared schemas
   src/middleware/        auth, CSRF, validation, error handling
   src/routes/            health, auth, admin, hod, faculty, attendance, reports
-  src/services/          users, departments, classes, enrollments, class-faculty, attendance, reports, audit
+  src/services/          users, departments, classes, enrollments, promotions, class-faculty, attendance, reports, audit
   src/test/              test bootstrap and helpers
 database/migrations/     numbered SQL migrations (0001_core_schema.sql)
 docs/                    setup.md, deployment.md, database-design.md, security.md
@@ -126,6 +126,14 @@ Administrator (role `admin`):
 | `/api/admin/users/:id/reset-password` | POST | Set a new password. |
 | `/api/admin/classes` | GET, POST | List classes with counts; create a class in a department. |
 | `/api/admin/classes/:id` | PATCH | Rename a class or change its academic year (department is immutable). |
+| `/api/admin/classes/:id/promote` | POST | Move every active student to another class in the same department (`targetClassId`); both classes need closed sessions, source history is kept, inactive accounts are skipped, and the operation is audit-logged. |
+
+Year-end promotion is an enrollment move, not an update to the class name:
+create the next-year class first, then choose the old and new class on the
+Classes page. Students already enrolled in the target class only leave the
+source class; accounts that are inactive stay in the source class for manual
+follow-up. Both classes must have their attendance sessions closed first. No
+enrollment or attendance rows are deleted.
 
 HOD (role `hod`, own department only — out-of-scope classes answer 404):
 
@@ -189,7 +197,9 @@ passwords), and accounts are deactivated rather than deleted.
 
 - **Administrator** — departments (one HOD each), classes, and all staff
   accounts: create, edit, change role, reset password, activate/deactivate.
-  Also system-wide attendance reports and the audit-log view.
+  Can also bulk-promote a class's students to another class in the same
+  department at year end. Also system-wide attendance reports and the
+  audit-log view.
 - **HOD** — their own department only: view classes and rosters, assign and
   unassign faculty (full history kept), and review department attendance
   reports with per-class drill-downs.

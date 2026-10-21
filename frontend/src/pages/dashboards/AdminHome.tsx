@@ -18,7 +18,7 @@ const QUICK_LINKS = [
   {
     to: '/admin/classes',
     title: 'Classes',
-    description: 'Set up classes per department and academic year.',
+    description: 'Set up classes per department and promote students at year end.',
     icon: 'M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Zm0 15A2.5 2.5 0 0 1 6.5 18H20',
   },
   {

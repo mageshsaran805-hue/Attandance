@@ -28,6 +28,7 @@ import {
   updateDepartment,
 } from '../services/departments.js';
 import { countActiveEnrollmentsForStudent, createEnrollment } from '../services/enrollments.js';
+import { promoteClassStudents } from '../services/promotions.js';
 import {
   approveRegistration,
   countPendingRegistrations,
@@ -136,6 +137,10 @@ const classUpdateSchema = z
   .refine((value) => value.name !== undefined || value.academicYear !== undefined, {
     message: 'provide name and/or academicYear',
   });
+
+const classPromoteSchema = z.object({
+  targetClassId: z.uuid('must be a valid target class id'),
+});
 
 const DEPARTMENT_UNIQUE_MESSAGES: Record<string, string> = {
   departments_name_key: 'A department with this name already exists.',
@@ -645,6 +650,85 @@ adminRouter.patch(
       throw new Error('admin: class details missing right after update');
     }
     res.json({ class: details });
+  },
+);
+
+/**
+ * POST /api/admin/classes/:id/promote — move every active student from this
+ * class to another class in the same department.
+ *
+ * Promotion closes source enrollments (history is never deleted) and creates
+ * target enrollments in one transaction. Students who already have an active
+ * target enrollment only leave the source; inactive accounts are skipped and
+ * reported. Either class having an open attendance session blocks the move so
+ * a later close cannot miss or mis-mark students. A single summary entry
+ * records the whole operation in the audit log, including the affected
+ * student ids.
+ */
+adminRouter.post(
+  '/admin/classes/:id/promote',
+  validateParams(uuidParamSchema),
+  validateBody(classPromoteSchema),
+  async (req, res) => {
+    const { id } = req.params as { id: string };
+    const { targetClassId } = req.body as z.infer<typeof classPromoteSchema>;
+    const actorUserId = authenticatedUserId(req);
+
+    const promotion = await withTransaction(async (client) => {
+      const result = await promoteClassStudents(id, targetClassId, client);
+      const promotedCount = result.promotedStudentUserIds.length;
+      const alreadyEnrolledCount = result.alreadyEnrolledStudentUserIds.length;
+      const skippedInactiveCount = result.skippedInactiveStudentUserIds.length;
+
+      await logAudit(
+        {
+          actorUserId,
+          action: 'admin.class_promote',
+          entityType: 'class',
+          entityId: result.targetClass.id,
+          oldValue: {
+            sourceClassId: result.sourceClass.id,
+            targetClassId: result.targetClass.id,
+          },
+          newValue: {
+            sourceClassId: result.sourceClass.id,
+            sourceClassName: result.sourceClass.name,
+            sourceAcademicYear: result.sourceClass.academicYear,
+            targetClassId: result.targetClass.id,
+            targetClassName: result.targetClass.name,
+            targetAcademicYear: result.targetClass.academicYear,
+            promotedCount,
+            alreadyEnrolledCount,
+            skippedInactiveCount,
+            promotedStudentUserIds: result.promotedStudentUserIds,
+            alreadyEnrolledStudentUserIds: result.alreadyEnrolledStudentUserIds,
+            skippedInactiveStudentUserIds: result.skippedInactiveStudentUserIds,
+          },
+          ip: req.ip ?? null,
+        },
+        client,
+      );
+
+      return result;
+    });
+
+    res.json({
+      promotion: {
+        sourceClass: {
+          id: promotion.sourceClass.id,
+          name: promotion.sourceClass.name,
+          academicYear: promotion.sourceClass.academicYear,
+        },
+        targetClass: {
+          id: promotion.targetClass.id,
+          name: promotion.targetClass.name,
+          academicYear: promotion.targetClass.academicYear,
+        },
+        promotedCount: promotion.promotedStudentUserIds.length,
+        alreadyEnrolledCount: promotion.alreadyEnrolledStudentUserIds.length,
+        skippedInactiveCount: promotion.skippedInactiveStudentUserIds.length,
+      },
+    });
   },
 );
 
