@@ -100,17 +100,25 @@ export default function AdminUsersPage() {
 
   const submitCreate = () => {
     void create.run(async () => {
-      const result = await apiFetch<{ user: AdminUser }>('/api/admin/users', {
-        method: 'POST',
-        body: {
-          fullName: createName,
-          email: createEmail,
-          role: createRole,
-          password: createPassword,
+      const result = await apiFetch<{ user: AdminUser; reactivated?: boolean }>(
+        '/api/admin/users',
+        {
+          method: 'POST',
+          body: {
+            fullName: createName,
+            email: createEmail,
+            role: createRole,
+            password: createPassword,
+          },
         },
-      })
+      )
       setCreateOpen(false)
-      setFlash({ tone: 'success', text: `Account for ${result.user.fullName} created.` })
+      setFlash({
+        tone: 'success',
+        text: result.reactivated
+          ? `Deactivated account for ${result.user.fullName} reactivated and updated.`
+          : `Account for ${result.user.fullName} created.`,
+      })
       users.reload()
     })
   }
@@ -420,6 +428,10 @@ export default function AdminUsersPage() {
             error={create.issues.email}
             required
           />
+          <p className="text-xs text-slate-500">
+            If this email belongs to a deactivated account, that account will be reactivated and
+            updated with these details instead of creating a duplicate.
+          </p>
           <SelectField
             id="account-role"
             label="Role"

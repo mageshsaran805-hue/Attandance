@@ -417,6 +417,76 @@ describe.skipIf(!enabled)('administration integration (real database)', () => {
     expect(denied.status).toBe(403);
   });
 
+  it('reactivates and updates a deactivated account when creating with the same email', async () => {
+    const admin = await loginAs(adminEmail);
+    const targetEmail = email('reactivate');
+
+    const first = await admin.post('/api/admin/users', {
+      fullName: 'IT Reactivate Old',
+      email: targetEmail,
+      role: 'faculty',
+      password: PASSWORD,
+    });
+    expect(first.status).toBe(201);
+    const targetId = first.body.user.id as string;
+    created.userIds.push(targetId);
+
+    const off = await admin.post(`/api/admin/users/${targetId}/status`, { isActive: false });
+    expect(off.status).toBe(200);
+    expect(off.body.user.isActive).toBe(false);
+
+    const second = await admin.post('/api/admin/users', {
+      fullName: 'IT Reactivate New',
+      email: targetEmail,
+      role: 'faculty',
+      password: 'New-Integration-Passw0rd!',
+    });
+    expect(second.status).toBe(200);
+    expect(second.body.reactivated).toBe(true);
+    expect(second.body.user.id).toBe(targetId);
+    expect(second.body.user.isActive).toBe(true);
+    expect(second.body.user.fullName).toBe('IT Reactivate New');
+
+    const newLogin = new ApiSession();
+    await newLogin.bootstrap();
+    const signedIn = await newLogin.login(targetEmail, 'New-Integration-Passw0rd!');
+    expect(signedIn.status).toBe(200);
+
+    const oldLogin = new ApiSession();
+    await oldLogin.bootstrap();
+    const rejected = await oldLogin.login(targetEmail, PASSWORD);
+    expect(rejected.status).toBe(401);
+
+    const activeDuplicate = await admin.post('/api/admin/users', {
+      fullName: 'IT Reactivate Duplicate',
+      email: targetEmail,
+      role: 'faculty',
+      password: PASSWORD,
+    });
+    expect(activeDuplicate.status).toBe(409);
+    expect(activeDuplicate.body.error).toMatch(/active account/i);
+  });
+
+  it('does not reuse an inactive student account for faculty while actively enrolled', async () => {
+    const admin = await loginAs(adminEmail);
+
+    const off = await admin.post(`/api/admin/users/${student1Id}/status`, { isActive: false });
+    expect(off.status).toBe(200);
+    try {
+      const blocked = await admin.post('/api/admin/users', {
+        fullName: 'IT Student As Faculty',
+        email: student1Email,
+        role: 'faculty',
+        password: PASSWORD,
+      });
+      expect(blocked.status).toBe(409);
+      expect(blocked.body.error).toMatch(/enrolled/);
+    } finally {
+      const on = await admin.post(`/api/admin/users/${student1Id}/status`, { isActive: true });
+      expect(on.status).toBe(200);
+    }
+  });
+
   it('guards role changes while active role-bound records exist', async () => {
     const admin = await loginAs(adminEmail);
 
@@ -654,6 +724,7 @@ describe.skipIf(!enabled)('administration integration (real database)', () => {
     for (const expected of [
       'admin.department_hod_assign',
       'admin.user_create',
+      'admin.user_reactivate',
       'admin.user_status',
       'admin.user_role_change',
       'admin.class_update',

@@ -119,7 +119,7 @@ Administrator (role `admin`):
 | `/api/admin/departments` | GET, POST | List departments with HOD and usage counts; create a department. |
 | `/api/admin/departments/:id` | PATCH | Rename or recode a department. |
 | `/api/admin/departments/:id/hod` | PUT | Assign/clear the department HOD (strict 1:1, `hodUserId: null` clears). |
-| `/api/admin/users` | GET, POST | Filter/search accounts; create admin/HOD/faculty accounts (students are faculty-created). |
+| `/api/admin/users` | GET, POST | Filter/search accounts; create admin/HOD/faculty accounts (students are faculty-created). Creating with the email of a deactivated account reactivates and updates that account instead of failing. |
 | `/api/admin/users/:id` | PATCH | Update name/email. |
 | `/api/admin/users/:id/status` | POST | Activate/deactivate (`isActive`); deactivation applies on the next request. |
 | `/api/admin/users/:id/role` | POST | Change role; refused (409) while active role-bound records exist. |

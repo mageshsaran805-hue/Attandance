@@ -42,10 +42,12 @@ import {
   findUserById,
   getActiveAccountCounts,
   listUsers,
+  reactivateUser,
   setUserActive,
   setUserPassword,
   setUserRole,
   updateUserProfile,
+  type UserRole,
 } from '../services/users.js';
 
 /**
@@ -155,6 +157,47 @@ const CLASS_IDENTITY_UNIQUE_MESSAGES: Record<string, string> = {
   classes_identity_key:
     'A class with this name already exists in this department for this academic year.',
 };
+
+/**
+ * Role-bound records must be cleared before an account changes role, whether
+ * that happens through the role endpoint or by reusing a deactivated account
+ * during account creation.
+ */
+async function assertRoleChangeAllowed(
+  id: string,
+  currentRole: UserRole,
+  nextRole: UserRole,
+): Promise<void> {
+  if (currentRole === nextRole) {
+    return;
+  }
+
+  if (currentRole === 'student') {
+    const active = await countActiveEnrollmentsForStudent(id);
+    if (active > 0) {
+      throw new ApiError(
+        409,
+        `This student is actively enrolled in ${active} class(es). Unenroll them first.`,
+      );
+    }
+  } else if (currentRole === 'faculty') {
+    const active = await countActiveAssignmentsForFaculty(id);
+    if (active > 0) {
+      throw new ApiError(
+        409,
+        `This faculty member is actively assigned to ${active} class(es). Remove those assignments first.`,
+      );
+    }
+  } else if (currentRole === 'hod') {
+    const department = await findDepartmentHeadedBy(id);
+    if (department) {
+      throw new ApiError(
+        409,
+        `This HOD heads the ${department.name} department. Assign a different HOD first.`,
+      );
+    }
+  }
+}
 
 /** GET /api/admin/overview — headline counts for the admin dashboard. */
 adminRouter.get('/admin/overview', async (_req, res) => {
@@ -336,18 +379,86 @@ adminRouter.get('/admin/users', async (req, res) => {
   res.json({ users });
 });
 
-/** POST /api/admin/users — create an admin, HOD or faculty account. */
+/**
+ * POST /api/admin/users — create an admin, HOD or faculty account.
+ *
+ * A deactivated account keeps its email (and history). Creating another
+ * account with that email reactivates and updates the existing account
+ * instead of failing on the unique-email constraint.
+ */
 adminRouter.post('/admin/users', validateBody(userCreateSchema), async (req, res) => {
   const input = req.body as z.infer<typeof userCreateSchema>;
   const actorUserId = authenticatedUserId(req);
-  const passwordHash = await hashPassword(input.password);
 
+  const existing = await findUserByEmail(input.email);
+  if (existing?.isActive) {
+    throw new ApiError(
+      409,
+      'An active account with this email already exists. Edit that account instead.',
+    );
+  }
+
+  if (existing) {
+    await assertRoleChangeAllowed(existing.id, existing.role, input.role);
+    const passwordHash = await hashPassword(input.password);
+
+    const reactivated = await withTransaction(async (client) => {
+      const row = await reactivateUser(
+        existing.id,
+        {
+          email: input.email,
+          fullName: input.fullName,
+          role: input.role,
+          passwordHash,
+        },
+        client,
+      );
+      if (!row) {
+        throw new ApiError(
+          409,
+          'This account is no longer deactivated. Refresh the account list and edit it instead.',
+        );
+      }
+      await logAudit(
+        {
+          actorUserId,
+          action: 'admin.user_reactivate',
+          entityType: 'user',
+          entityId: row.id,
+          oldValue: {
+            email: existing.email,
+            fullName: existing.fullName,
+            role: existing.role,
+            isActive: false,
+          },
+          newValue: {
+            email: row.email,
+            fullName: row.fullName,
+            role: row.role,
+            isActive: true,
+          },
+          ip: req.ip ?? null,
+        },
+        client,
+      );
+      return row;
+    });
+
+    res.status(200).json({ user: reactivated, reactivated: true });
+    return;
+  }
+
+  const passwordHash = await hashPassword(input.password);
   const created = await withTransaction(async (client) => {
     const row = await createUser(
       { email: input.email, fullName: input.fullName, role: input.role, passwordHash },
       client,
     ).catch((error: unknown) =>
-      throwIfUniqueViolation(error, USER_EMAIL_UNIQUE_MESSAGES, 'An account with this email already exists.'),
+      throwIfUniqueViolation(
+        error,
+        USER_EMAIL_UNIQUE_MESSAGES,
+        'An account with this email already exists. Refresh the account list to edit or reactivate it.',
+      ),
     );
     await logAudit(
       {
@@ -479,31 +590,7 @@ adminRouter.post(
       return;
     }
 
-    if (current.role === 'student') {
-      const active = await countActiveEnrollmentsForStudent(id);
-      if (active > 0) {
-        throw new ApiError(
-          409,
-          `This student is actively enrolled in ${active} class(es). Unenroll them first.`,
-        );
-      }
-    } else if (current.role === 'faculty') {
-      const active = await countActiveAssignmentsForFaculty(id);
-      if (active > 0) {
-        throw new ApiError(
-          409,
-          `This faculty member is actively assigned to ${active} class(es). Remove those assignments first.`,
-        );
-      }
-    } else if (current.role === 'hod') {
-      const department = await findDepartmentHeadedBy(id);
-      if (department) {
-        throw new ApiError(
-          409,
-          `This HOD heads the ${department.name} department. Assign a different HOD first.`,
-        );
-      }
-    }
+    await assertRoleChangeAllowed(id, current.role, role);
 
     const updated = await withTransaction(async (client) => {
       const row = await setUserRole(id, role, client);

@@ -76,6 +76,11 @@ when backend behaviour changed. Report only results that were actually observed.
   skipped unless `TEST_DATABASE_URL` is set.
 - Login semantics: sessions are stateless JWTs; deactivation/role changes
   take effect on the next request; logout clears the cookie client-side.
+- Account creation semantics: emails stay unique for all accounts. Creating
+  an admin/HOD/faculty account with the email of a deactivated account
+  reactivates and updates that account (same id/history) instead of inserting
+  a duplicate; active duplicates are rejected. Role changes during reuse obey
+  the same active-record guards as the role endpoint.
 - The migration enables RLS and revokes `anon`/`authenticated` grants —
   keep doing that in every future migration that creates tables.
 - The Vite dev proxy forwards `/api/*` from :5173 to :4000

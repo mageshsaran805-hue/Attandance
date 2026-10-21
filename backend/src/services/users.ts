@@ -213,6 +213,40 @@ export async function updateUserProfile(
   return row ? mapAdminUser(row) : null;
 }
 
+/**
+ * Reuses a deactivated account when an administrator creates an account with
+ * the same email. The account id (and therefore its history) is preserved;
+ * the profile, role and password are replaced and the account is reactivated.
+ */
+export async function reactivateUser(
+  id: string,
+  input: {
+    email: string;
+    fullName: string;
+    role: UserRole;
+    passwordHash: string;
+  },
+  client?: Pool | PoolClient,
+): Promise<AdminUserRow | null> {
+  const db = client ?? getPool();
+  const { rows } = await db.query<DbAdminUserRow>(
+    `UPDATE users
+        SET email = $2,
+            full_name = $3,
+            role = $4,
+            password_hash = $5,
+            is_active = true,
+            register_number = CASE WHEN role <> $4 THEN NULL ELSE register_number END,
+            phone = CASE WHEN role <> $4 THEN NULL ELSE phone END,
+            section = CASE WHEN role <> $4 THEN NULL ELSE section END
+      WHERE id = $1 AND is_active = false
+      RETURNING ${ADMIN_USER_COLUMNS}`,
+    [id, input.email, input.fullName, input.role, input.passwordHash],
+  );
+  const row = rows[0];
+  return row ? mapAdminUser(row) : null;
+}
+
 export async function setUserActive(
   id: string,
   isActive: boolean,
